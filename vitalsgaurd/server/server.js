@@ -10,6 +10,80 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+const APPOINTMENT_DURATION_MINUTES = 20;
+const WORK_DAY_START_HOUR = 9;
+const WORK_DAY_END_HOUR = 17;
+
+const doctorsCatalog = [
+  { id: 'd1', name: 'Dr. Sarah Chen', specialty: 'Cardiologist' },
+  { id: 'd2', name: 'Dr. Rajesh Kumar', specialty: 'Neurologist' },
+  { id: 'd3', name: 'Dr. Lisa Wong', specialty: 'Physiologist' },
+];
+
+// In-memory store; replace with DB table when schema is finalized.
+const appointmentsStore = [];
+
+function isSameDate(isoDateTime, dateStr) {
+  return (isoDateTime || '').slice(0, 10) === dateStr;
+}
+
+function parseDateTime(dateStr, timeStr) {
+  return new Date(`${dateStr}T${timeStr}:00`);
+}
+
+function overlaps(startA, endA, startB, endB) {
+  return startA < endB && startB < endA;
+}
+
+function createDaySlots(dateStr) {
+  const slots = [];
+  const now = new Date();
+
+  for (let hour = WORK_DAY_START_HOUR; hour < WORK_DAY_END_HOUR; hour += 1) {
+    for (let minute = 0; minute < 60; minute += APPOINTMENT_DURATION_MINUTES) {
+      const start = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`);
+      const end = new Date(start.getTime() + APPOINTMENT_DURATION_MINUTES * 60 * 1000);
+
+      if (start > now) {
+        slots.push({
+          start: start.toISOString(),
+          end: end.toISOString()
+        });
+      }
+    }
+  }
+
+  return slots;
+}
+
+async function getDischargeEligibility({ userId, username }) {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, username, is_discharged')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (!error && data && typeof data.is_discharged === 'boolean') {
+      return {
+        discharged: data.is_discharged,
+        source: 'users.is_discharged'
+      };
+    }
+  } catch (_err) {
+    // Fallback below
+  }
+
+  const uname = (username || '').toLowerCase();
+  const uid = String(userId || '').toLowerCase();
+  const demoDischarged = uname === 'patient1' || uid.startsWith('demo-patient');
+
+  return {
+    discharged: demoDischarged,
+    source: 'demo-fallback'
+  };
+}
+
 // ═══════════════════════════════════════════════════
 //  AUTH  —  /auth
 //  action: "signup" | "login"
@@ -106,6 +180,148 @@ app.post("/store-report", async (req, res) => {
     console.error("[Store Report] Error:", err.message);
     res.json({ success: false, message: "AI processing or DB storage failed.", error: err.message });
   }
+});
+
+// ═══════════════════════════════════════════════════
+//  APPOINTMENTS ROUTES
+// ═══════════════════════════════════════════════════
+app.get('/appointments/eligibility/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const username = req.query.username || '';
+
+  const eligibility = await getDischargeEligibility({ userId, username });
+  res.json({
+    success: true,
+    discharged: eligibility.discharged,
+    source: eligibility.source,
+    message: eligibility.discharged
+      ? 'Patient is discharged and can book appointments.'
+      : 'Patient is not discharged yet. Booking is currently locked.'
+  });
+});
+
+app.get('/appointments/doctors', async (req, res) => {
+  const { date, patientId } = req.query;
+
+  if (!date || !patientId) {
+    return res.status(400).json({ success: false, message: 'date and patientId are required.' });
+  }
+
+  const daySlots = createDaySlots(date);
+  const dayAppointments = appointmentsStore.filter((a) => isSameDate(a.start, date));
+  const patientDayAppointments = dayAppointments.filter((a) => String(a.patientId) === String(patientId));
+
+  const doctors = doctorsCatalog.map((doctor) => {
+    const doctorAppointments = dayAppointments.filter((a) => a.doctorId === doctor.id);
+
+    const slots = daySlots.map((slot) => {
+      const slotStart = new Date(slot.start);
+      const slotEnd = new Date(slot.end);
+
+      const doctorConflict = doctorAppointments.find((a) => overlaps(slotStart, slotEnd, new Date(a.start), new Date(a.end)));
+      const patientConflict = patientDayAppointments.find((a) => overlaps(slotStart, slotEnd, new Date(a.start), new Date(a.end)));
+
+      return {
+        start: slot.start,
+        end: slot.end,
+        available: !doctorConflict && !patientConflict,
+        reason: doctorConflict ? 'booked' : patientConflict ? 'patient-overlap' : null,
+        appointmentId: doctorConflict?.id || patientConflict?.id || null
+      };
+    });
+
+    return { ...doctor, slots };
+  });
+
+  return res.json({
+    success: true,
+    appointmentDurationMinutes: APPOINTMENT_DURATION_MINUTES,
+    doctors
+  });
+});
+
+app.get('/appointments/my', async (req, res) => {
+  const { patientId } = req.query;
+
+  if (!patientId) {
+    return res.status(400).json({ success: false, message: 'patientId is required.' });
+  }
+
+  const appointments = appointmentsStore
+    .filter((a) => String(a.patientId) === String(patientId))
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+  return res.json({ success: true, appointments });
+});
+
+app.post('/appointments/book', async (req, res) => {
+  const { patientId, username, doctorId, start } = req.body;
+
+  if (!patientId || !doctorId || !start) {
+    return res.status(400).json({ success: false, message: 'patientId, doctorId and start are required.' });
+  }
+
+  const doctor = doctorsCatalog.find((d) => d.id === doctorId);
+  if (!doctor) {
+    return res.status(400).json({ success: false, message: 'Invalid doctorId.' });
+  }
+
+  const eligibility = await getDischargeEligibility({ userId: patientId, username });
+  if (!eligibility.discharged) {
+    return res.status(403).json({ success: false, message: 'Patient is not discharged. Appointment booking is locked.' });
+  }
+
+  const slotStart = new Date(start);
+  if (Number.isNaN(slotStart.getTime())) {
+    return res.status(400).json({ success: false, message: 'Invalid start datetime.' });
+  }
+
+  const slotEnd = new Date(slotStart.getTime() + APPOINTMENT_DURATION_MINUTES * 60 * 1000);
+  const minutes = slotStart.getMinutes();
+  if (minutes % APPOINTMENT_DURATION_MINUTES !== 0) {
+    return res.status(400).json({ success: false, message: `Slots must start at ${APPOINTMENT_DURATION_MINUTES}-minute boundaries.` });
+  }
+
+  const hour = slotStart.getHours();
+  if (hour < WORK_DAY_START_HOUR || hour >= WORK_DAY_END_HOUR) {
+    return res.status(400).json({ success: false, message: 'Slot is outside doctor working hours.' });
+  }
+
+  const now = new Date();
+  if (slotStart <= now) {
+    return res.status(400).json({ success: false, message: 'Cannot book past slots.' });
+  }
+
+  const doctorConflict = appointmentsStore.find((a) =>
+    a.doctorId === doctorId && overlaps(slotStart, slotEnd, new Date(a.start), new Date(a.end))
+  );
+  if (doctorConflict) {
+    return res.status(409).json({ success: false, message: 'This doctor slot is already booked.' });
+  }
+
+  const patientConflict = appointmentsStore.find((a) =>
+    String(a.patientId) === String(patientId) && overlaps(slotStart, slotEnd, new Date(a.start), new Date(a.end))
+  );
+  if (patientConflict) {
+    return res.status(409).json({ success: false, message: 'You already have an appointment overlapping this slot.' });
+  }
+
+  const appointment = {
+    id: `apt_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+    patientId,
+    username: username || '',
+    doctorId: doctor.id,
+    doctorName: doctor.name,
+    specialty: doctor.specialty,
+    start: slotStart.toISOString(),
+    end: slotEnd.toISOString(),
+    durationMinutes: APPOINTMENT_DURATION_MINUTES,
+    status: 'booked',
+    createdAt: new Date().toISOString()
+  };
+
+  appointmentsStore.push(appointment);
+  return res.json({ success: true, appointment });
 });
 
 // ═══════════════════════════════════════════════════

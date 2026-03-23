@@ -6,6 +6,7 @@ import { patients } from '../data/mockVitals';
 import DigitalTwin from './DigitalTwin';
 
 const API_BASES = ['http://localhost:5000/api', 'http://localhost:8000/api'];
+const NODE_API_BASE = 'http://localhost:5003';
 
 async function postJsonWithFallback(urls, payload) {
   let lastError = 'Service is currently unavailable.';
@@ -174,6 +175,24 @@ export default function PatientDashboard({ userId, onLogout }) {
     { hour: 24, risk: 45 }
   ]);
 
+  const [appointmentDate, setAppointmentDate] = useState(() => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${day}`;
+  });
+  const [appointmentEligibility, setAppointmentEligibility] = useState({
+    loading: false,
+    discharged: false,
+    message: ''
+  });
+  const [availableDoctors, setAvailableDoctors] = useState([]);
+  const [myAppointments, setMyAppointments] = useState([]);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [appointmentLoading, setAppointmentLoading] = useState(false);
+  const [appointmentError, setAppointmentError] = useState('');
+  const [appointmentSuccess, setAppointmentSuccess] = useState('');
+
   // Auto-update main dashboard with current vitals
   useEffect(() => {
     const randomVariation = () => ({
@@ -320,6 +339,89 @@ export default function PatientDashboard({ userId, onLogout }) {
     return () => clearTimeout(timer);
   }, [inputHr, inputSpo2, inputTemp, inputBpSystolic, inputBpDiastolic]);
 
+  const getStoredUsername = () => {
+    try {
+      const stored = localStorage.getItem('vg_user');
+      if (!stored) return '';
+      const parsed = JSON.parse(stored);
+      return parsed?.username || '';
+    } catch (_err) {
+      return '';
+    }
+  };
+
+  const refreshAppointmentData = async () => {
+    if (!userId) return;
+
+    setAppointmentLoading(true);
+    setAppointmentError('');
+
+    try {
+      const username = getStoredUsername();
+
+      const [eligibilityRes, doctorsRes, myRes] = await Promise.all([
+        axios.get(`${NODE_API_BASE}/appointments/eligibility/${encodeURIComponent(userId)}`, {
+          params: { username }
+        }),
+        axios.get(`${NODE_API_BASE}/appointments/doctors`, {
+          params: {
+            date: appointmentDate,
+            patientId: userId
+          }
+        }),
+        axios.get(`${NODE_API_BASE}/appointments/my`, {
+          params: { patientId: userId }
+        })
+      ]);
+
+      setAppointmentEligibility({
+        loading: false,
+        discharged: Boolean(eligibilityRes.data?.discharged),
+        message: eligibilityRes.data?.message || ''
+      });
+      setAvailableDoctors(doctorsRes.data?.doctors || []);
+      setMyAppointments(myRes.data?.appointments || []);
+    } catch (err) {
+      setAppointmentEligibility(prev => ({ ...prev, loading: false }));
+      setAppointmentError(err?.response?.data?.message || err?.message || 'Failed to load appointment data.');
+    } finally {
+      setAppointmentLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'appointments') {
+      refreshAppointmentData();
+    }
+  }, [activeTab, appointmentDate, userId]);
+
+  const handleBookAppointment = async () => {
+    if (!selectedSlot) return;
+
+    setAppointmentError('');
+    setAppointmentSuccess('');
+
+    try {
+      const username = getStoredUsername();
+      const response = await axios.post(`${NODE_API_BASE}/appointments/book`, {
+        patientId: userId,
+        username,
+        doctorId: selectedSlot.doctorId,
+        start: selectedSlot.start
+      });
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Could not book appointment.');
+      }
+
+      setAppointmentSuccess('Appointment booked successfully.');
+      setSelectedSlot(null);
+      await refreshAppointmentData();
+    } catch (err) {
+      setAppointmentError(err?.response?.data?.message || err?.message || 'Booking failed.');
+    }
+  };
+
   // Keep digital twin vitals in sync with What-If sliders, while preserving agent-derived region/condition.
   useEffect(() => {
     setDigitalTwinData(prev => ({
@@ -446,6 +548,11 @@ export default function PatientDashboard({ userId, onLogout }) {
     { name: 'Dr. Rajesh Kumar', specialty: 'Neurologist', date: 'Upcoming' },
     { name: 'Dr. Lisa Wong', specialty: 'Physiologist', date: 'Upcoming' },
   ];
+
+  const formatSlotTime = (isoValue) => {
+    const dt = new Date(isoValue);
+    return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: '#f5f3ff', fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
@@ -939,6 +1046,171 @@ export default function PatientDashboard({ userId, onLogout }) {
                   </div>
                 </>
               )}
+            </div>
+          </>
+        ) : activeTab === 'appointments' ? (
+          <>
+            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: '0 0 1rem 0', color: '#7C3AED', fontSize: '1.25rem' }}>📅 Appointments</h3>
+              <p style={{ margin: '0 0 1rem 0', color: '#64748b', fontSize: '0.92rem' }}>
+                Booking is enabled only after discharge confirmation. Each slot is 20 minutes, and overlapping appointments are blocked automatically.
+              </p>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <label style={{ color: '#334155', fontWeight: 600, fontSize: '0.9rem' }}>Select Date</label>
+                <input
+                  type="date"
+                  value={appointmentDate}
+                  onChange={(e) => {
+                    setAppointmentDate(e.target.value);
+                    setSelectedSlot(null);
+                    setAppointmentError('');
+                    setAppointmentSuccess('');
+                  }}
+                  style={{ padding: '0.55rem 0.7rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+                />
+                <button
+                  onClick={refreshAppointmentData}
+                  style={{ padding: '0.55rem 1rem', borderRadius: '8px', border: 'none', backgroundColor: '#7C3AED', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Refresh Slots
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem', padding: '1rem 1.2rem', borderRadius: '10px', backgroundColor: appointmentEligibility.discharged ? '#ecfdf5' : '#fef2f2', border: `1px solid ${appointmentEligibility.discharged ? '#86efac' : '#fecaca'}`, color: appointmentEligibility.discharged ? '#166534' : '#991b1b' }}>
+              <strong style={{ display: 'block', marginBottom: '0.4rem' }}>
+                {appointmentEligibility.discharged ? 'Discharge Status: Eligible for booking' : 'Discharge Status: Booking locked'}
+              </strong>
+              <span style={{ fontSize: '0.9rem' }}>
+                {appointmentEligibility.message || (appointmentEligibility.discharged ? 'You can now select doctor slots.' : 'Please complete discharge before booking appointments.')}
+              </span>
+            </div>
+
+            {appointmentError && (
+              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '0.9rem' }}>
+                {appointmentError}
+              </div>
+            )}
+
+            {appointmentSuccess && (
+              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '8px', backgroundColor: '#ecfdf5', border: '1px solid #86efac', color: '#166534', fontSize: '0.9rem' }}>
+                {appointmentSuccess}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#7C3AED', fontSize: '1.05rem' }}>Doctor Slot Timing</h4>
+
+                {appointmentLoading ? (
+                  <p style={{ color: '#64748b' }}>Loading slots...</p>
+                ) : !availableDoctors.length ? (
+                  <p style={{ color: '#64748b' }}>No doctors configured yet.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {availableDoctors.map((doctor) => (
+                      <div key={doctor.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem' }}>
+                        <div style={{ marginBottom: '0.8rem' }}>
+                          <div style={{ fontWeight: 700, color: '#1e293b' }}>{doctor.name}</div>
+                          <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{doctor.specialty}</div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '0.6rem' }}>
+                          {doctor.slots.map((slot) => {
+                            const isSelected = selectedSlot && selectedSlot.doctorId === doctor.id && selectedSlot.start === slot.start;
+                            const isDisabled = !appointmentEligibility.discharged || !slot.available;
+                            return (
+                              <button
+                                key={`${doctor.id}-${slot.start}`}
+                                disabled={isDisabled}
+                                onClick={() => {
+                                  setSelectedSlot({
+                                    doctorId: doctor.id,
+                                    doctorName: doctor.name,
+                                    specialty: doctor.specialty,
+                                    start: slot.start,
+                                    end: slot.end
+                                  });
+                                  setAppointmentError('');
+                                  setAppointmentSuccess('');
+                                }}
+                                style={{
+                                  borderRadius: '8px',
+                                  border: isSelected ? '2px solid #7C3AED' : '1px solid #cbd5e1',
+                                  backgroundColor: isSelected ? '#f3e8ff' : slot.available ? '#fff' : '#f1f5f9',
+                                  color: slot.available ? '#1e293b' : '#94a3b8',
+                                  padding: '0.55rem 0.45rem',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 600,
+                                  cursor: isDisabled ? 'not-allowed' : 'pointer'
+                                }}
+                                title={slot.available ? 'Available' : (slot.reason === 'patient-overlap' ? 'Conflicts with your existing appointment' : 'Already booked')}
+                              >
+                                {formatSlotTime(slot.start)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '1.2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                  <h4 style={{ margin: '0 0 0.8rem 0', color: '#7C3AED', fontSize: '1rem' }}>Selected Slot</h4>
+                  {selectedSlot ? (
+                    <>
+                      <p style={{ margin: '0.2rem 0', color: '#1e293b', fontWeight: 700 }}>{selectedSlot.doctorName}</p>
+                      <p style={{ margin: '0.2rem 0', color: '#64748b', fontSize: '0.85rem' }}>{selectedSlot.specialty}</p>
+                      <p style={{ margin: '0.2rem 0', color: '#334155', fontSize: '0.85rem' }}>
+                        {new Date(selectedSlot.start).toLocaleDateString()} • {formatSlotTime(selectedSlot.start)} - {formatSlotTime(selectedSlot.end)}
+                      </p>
+                    </>
+                  ) : (
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.88rem' }}>Pick an available 20-minute slot.</p>
+                  )}
+
+                  <button
+                    onClick={handleBookAppointment}
+                    disabled={!selectedSlot || !appointmentEligibility.discharged || appointmentLoading}
+                    style={{
+                      width: '100%',
+                      marginTop: '0.9rem',
+                      padding: '0.65rem 0.8rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: (!selectedSlot || !appointmentEligibility.discharged || appointmentLoading) ? '#cbd5e1' : '#7C3AED',
+                      color: '#fff',
+                      fontWeight: 700,
+                      cursor: (!selectedSlot || !appointmentEligibility.discharged || appointmentLoading) ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    Book Appointment
+                  </button>
+                </div>
+
+                <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '1.2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                  <h4 style={{ margin: '0 0 0.8rem 0', color: '#7C3AED', fontSize: '1rem' }}>My Appointments</h4>
+                  {!myAppointments.length ? (
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.88rem' }}>No appointments booked yet.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem', maxHeight: '320px', overflowY: 'auto' }}>
+                      {myAppointments.map((appt) => (
+                        <div key={appt.id} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.7rem' }}>
+                          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.9rem' }}>{appt.doctorName}</div>
+                          <div style={{ color: '#64748b', fontSize: '0.78rem', marginBottom: '0.25rem' }}>{appt.specialty}</div>
+                          <div style={{ color: '#334155', fontSize: '0.8rem' }}>
+                            {new Date(appt.start).toLocaleDateString()} • {formatSlotTime(appt.start)} - {formatSlotTime(appt.end)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </>
         ) : (
