@@ -133,28 +133,44 @@ export default function DoctorDashboard({ onLogout }) {
 
 					{scanResult && (
 						<div className="ai-debate" style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '1rem' }}>
-							<h3 style={{ color: '#c084fc', marginBottom: '1rem' }}>AI Debate (Monitoring vs Diagnosis)</h3>
-							
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-								<div style={{ background: '#0f172a', padding: '0.8rem', borderRadius: '8px' }}>
-									<strong style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase' }}>Monitoring Report</strong>
-									<p style={{ color: '#e2e8f0', fontSize: '0.9rem', marginTop: '0.4rem' }}>{scanResult.debate.monitoring_view}</p>
-								</div>
-								<div style={{ background: '#0f172a', padding: '0.8rem', borderRadius: '8px' }}>
-									<strong style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase' }}>Diagnosis Report</strong>
-									<p style={{ color: '#e2e8f0', fontSize: '0.9rem', marginTop: '0.4rem' }}>{scanResult.debate.diagnosis_view}</p>
-								</div>
+							<h3 style={{ color: '#c084fc', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.1rem' }}>
+								<span>🤖</span> Live AI Multi-Agent Interaction
+							</h3>
+
+							{/* Agent Feed */}
+							<div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
+								{[
+									{ key: 'monitoring', icon: '📈', color: '#38bdf8', label: 'Monitoring Agent', bg: '#0c1a2e',
+									  text: scanResult.debate?.monitoring_view },
+									{ key: 'diagnosis',  icon: '🩺', color: '#f472b6', label: 'Diagnosis Agent',  bg: '#1a0e1e',
+									  text: scanResult.debate?.diagnosis_view },
+									{ key: 'debate',     icon: '⚖️', color: '#c084fc', label: 'Debate Coordinator', bg: '#1e1b4b',
+									  text: `Consensus reached (Disagreement score: ${scanResult.disagreement_score}/10)\n${scanResult.debate?.consensus || scanResult.consensus}` },
+									{ key: 'explanation',icon: '🗣️', color: '#fbbf24', label: 'Explanation Agent', bg: '#1c1500',
+									  text: scanResult.explanation?.voice_summary || scanResult.voice_summary },
+									{ key: 'actions',    icon: '⚡', color: '#22c55e', label: 'Action Agent', bg: '#0b1e0e',
+									  text: (scanResult.actions || []).map((a, i) => `${i + 1}. ${a}`).join('\n') },
+									{ key: 'emergency',  icon: '🚨', color: '#ef4444', label: 'Emergency Agent', bg: '#1f0808',
+									  text: `Urgency: ${scanResult.emergency?.urgency_note}\nDispatch Alert: ${scanResult.emergency?.dispatch_alert ? 'YES ⚠️' : 'NO ✓'}` },
+								].filter(item => item.text).map(item => (
+									<div key={item.key} style={{ background: item.bg, padding: '1rem 1.2rem', borderRadius: '12px', borderLeft: `4px solid ${item.color}` }}>
+										<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
+											<span style={{ fontSize: '1.2rem' }}>{item.icon}</span>
+											<strong style={{ color: item.color, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+												{item.label}
+											</strong>
+										</div>
+										<p style={{ color: '#f1f5f9', margin: 0, fontSize: '0.9rem', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+											{item.text}
+										</p>
+									</div>
+								))}
 							</div>
 
-							<p style={{ color: '#f8fafc', fontSize: '1rem', fontStyle: 'italic', borderLeft: '4px solid #c084fc', paddingLeft: '1rem' }}>
-								{scanResult.consensus}
-							</p>
-							
-							<div style={{ marginTop: '1rem', fontSize: '0.85rem', color: '#94a3b8' }}>
-								Disagreement Score: <strong>{scanResult.disagreement_score}/10</strong> | 
-								Emergency Override: <strong style={{ color: scanResult.emergency.dispatch_alert ? '#ef4444' : '#22c55e' }}>
-									{scanResult.emergency.dispatch_alert ? 'YES' : 'NO'}
-								</strong>
+							<div style={{ marginTop: '1.2rem', paddingTop: '1rem', borderTop: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#64748b' }}>
+								<span>Disagreement Score: <strong style={{ color: '#c084fc' }}>{scanResult.disagreement_score}/10</strong></span>
+								<span>EWS: <strong style={{ color: scanResult.ews?.colour || '#22c55e' }}>{scanResult.ews?.level?.toUpperCase()}</strong></span>
+								<span>Emergency Override: <strong style={{ color: scanResult.emergency?.dispatch_alert ? '#ef4444' : '#22c55e' }}>{scanResult.emergency?.dispatch_alert ? 'YES' : 'NO'}</strong></span>
 							</div>
 						</div>
 					)}
@@ -166,4 +182,5 @@ export default function DoctorDashboard({ onLogout }) {
 			</section>
 		</div>
 	);
+
 }

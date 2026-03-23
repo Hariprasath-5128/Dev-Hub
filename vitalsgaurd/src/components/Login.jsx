@@ -99,19 +99,32 @@ export default function Login({ onLogin }) {
         password: account.password,
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        // Offline / invalid Supabase creds — use local demo mode
+        if (authError.message === 'OFFLINE_MODE' || authError.status >= 400 || !data) {
+          const userRole = userRoleMap[account.email] || demoRole;
+          onLogin({ role: userRole, userId: `demo-${demoRole}`, email: account.email });
+          navigate(`/${userRole}`);
+          return;
+        }
+        throw authError;
+      }
 
-      if (data.user) {
+      if (data?.user) {
         const userRole = userRoleMap[account.email] || demoRole;
         onLogin({ role: userRole, userId: data.user.id, email: data.user.email });
         navigate(`/${userRole}`);
       }
     } catch (err) {
-      setError(`Failed to login as ${demoRole}`);
+      // Any failure → still allow demo mode so the app is always usable
+      const userRole = userRoleMap[account.email] || demoRole;
+      onLogin({ role: userRole, userId: `demo-${demoRole}`, email: account.email });
+      navigate(`/${userRole}`);
     } finally {
       setLoading(false);
     }
   }
+
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>

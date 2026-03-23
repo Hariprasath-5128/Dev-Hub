@@ -34,7 +34,7 @@ export default function App() {
 
     checkSession();
 
-    // Subscribe to auth changes
+    // Subscribe to auth changes (safe in both online & offline/stub mode)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         const userMetadata = session.user.user_metadata || {};
@@ -43,7 +43,8 @@ export default function App() {
           userId: session.user.id,
           email: session.user.email,
         });
-      } else {
+      } else if (event === 'SIGNED_OUT') {
+        // Only clear user on an explicit sign-out, not on initial stub no-session
         setUser(null);
       }
     });
