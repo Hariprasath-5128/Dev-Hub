@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
 import { patients } from '../data/mockVitals';
+import DigitalTwin from './DigitalTwin';
 
 const API_BASES = ['http://localhost:5000/api', 'http://localhost:8000/api'];
 
@@ -42,6 +43,67 @@ const situationDescriptions = {
   'Hypotension': 'Low blood pressure detected. Could lead to fainting or indicate poor circulation.',
   'Emergency': 'Critical multi-vital failure pattern detected. Immediate medical intervention is highly recommended.'
 };
+
+function deriveRegionFromAgentAnswer(agentResult, fallbackCondition = '') {
+  const combinedText = [
+    agentResult?.condition,
+    agentResult?.ui_label,
+    agentResult?.consensus,
+    agentResult?.voice_summary,
+    agentResult?.debate?.monitoring_view,
+    agentResult?.debate?.diagnosis_view,
+    agentResult?.debate?.consensus,
+    agentResult?.explanation?.voice_summary,
+    agentResult?.emergency?.urgency_note,
+    ...(agentResult?.actions || [])
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  const baseline = (fallbackCondition || '').toLowerCase();
+  const text = `${combinedText} ${baseline}`;
+
+  if (text.includes('brain') || text.includes('neuro') || text.includes('seizure') || text.includes('stroke')) {
+    return 'brain';
+  }
+  if (text.includes('lung') || text.includes('respiratory') || text.includes('hypox') || text.includes('spo2') || text.includes('oxygen')) {
+    return 'lungs';
+  }
+  if (text.includes('fever') || text.includes('sepsis') || text.includes('temperature') || text.includes('systemic')) {
+    return 'body';
+  }
+  if (text.includes('heart') || text.includes('tachy') || text.includes('brady') || text.includes('cardia') || text.includes('arrhythm')) {
+    return 'heart';
+  }
+  return 'heart';
+}
+
+function buildTwinDataFromAgentResult(agentResult, vitalsSnapshot, mlResult) {
+  const fallbackCondition = mlResult?.predicted_condition || 'normal';
+  const region = deriveRegionFromAgentAnswer(agentResult, fallbackCondition);
+  const ewsLevel = (agentResult?.ews?.level || '').toLowerCase();
+  const emergency = Boolean(agentResult?.emergency?.dispatch_alert);
+
+  let heatmapColor = '#38bdf8';
+  if (emergency || ewsLevel === 'high' || ewsLevel === 'red') heatmapColor = '#ef4444';
+  else if (ewsLevel === 'medium' || ewsLevel === 'amber' || ewsLevel === 'yellow') heatmapColor = '#f59e0b';
+  else if (ewsLevel === 'low' || ewsLevel === 'green') heatmapColor = '#22c55e';
+
+  return {
+    ...agentResult,
+    condition: agentResult?.condition || agentResult?.ui_label || fallbackCondition,
+    affected_regions: [region],
+    heatmap_colour: agentResult?.heatmap_colour || heatmapColor,
+    fingerprints: Array.isArray(agentResult?.fingerprints) && agentResult.fingerprints.length
+      ? agentResult.fingerprints
+      : Object.entries(mlResult?.all_probabilities || {}).map(([disease, probability]) => ({ disease, probability })),
+    vitals: {
+      heart_rate: vitalsSnapshot.heart_rate,
+      spo2: vitalsSnapshot.spo2,
+      temperature: vitalsSnapshot.temperature,
+      systolic_bp: vitalsSnapshot.systolic_bp,
+      diastolic_bp: vitalsSnapshot.diastolic_bp
+    }
+  };
+}
 
 function getSituationDescription(condition) {
   if (!condition) return '';
@@ -85,6 +147,17 @@ export default function PatientDashboard({ userId, onLogout }) {
   const [agentScanLoading, setAgentScanLoading] = useState(false);
   const [agentScanError, setAgentScanError] = useState('');
   const [agentScanResult, setAgentScanResult] = useState(null);
+  const [digitalTwinData, setDigitalTwinData] = useState({
+    condition: '',
+    affected_regions: ['none'],
+    vitals: {
+      heart_rate: originalLatest.hr,
+      spo2: originalLatest.spo2,
+      temperature: originalLatest.temp,
+      systolic_bp: 116,
+      diastolic_bp: 72
+    }
+  });
   const [trajectoryData, setTrajectoryData] = useState([
     { hour: 0, risk: 45 },
     { hour: 2, risk: 48 },
@@ -247,6 +320,20 @@ export default function PatientDashboard({ userId, onLogout }) {
     return () => clearTimeout(timer);
   }, [inputHr, inputSpo2, inputTemp, inputBpSystolic, inputBpDiastolic]);
 
+  // Keep digital twin vitals in sync with What-If sliders, while preserving agent-derived region/condition.
+  useEffect(() => {
+    setDigitalTwinData(prev => ({
+      ...prev,
+      vitals: {
+        heart_rate: Number(inputHr) || 0,
+        spo2: Number(inputSpo2) || 0,
+        temperature: Number(inputTemp) || 0,
+        systolic_bp: Number(inputBpSystolic) || 0,
+        diastolic_bp: Number(inputBpDiastolic) || 0
+      }
+    }));
+  }, [inputHr, inputSpo2, inputTemp, inputBpSystolic, inputBpDiastolic]);
+
   const handleRunAgentDebateScan = async () => {
     setAgentScanLoading(true);
     setAgentScanError('');
@@ -264,6 +351,14 @@ export default function PatientDashboard({ userId, onLogout }) {
       bp_systolic: Number(inputBpSystolic),
       bp_diastolic: Number(inputBpDiastolic),
       ecg_irregularity: Number((Math.min(0.95, Math.max(0.05, severityScore / 100))).toFixed(2))
+    };
+
+    const vitalsSnapshot = {
+      heart_rate: hrNum,
+      spo2: spo2Num,
+      temperature: tempNum,
+      systolic_bp: Number(inputBpSystolic),
+      diastolic_bp: Number(inputBpDiastolic)
     };
 
     const endpoints = [
@@ -289,6 +384,7 @@ export default function PatientDashboard({ userId, onLogout }) {
 
         const result = await response.json();
         setAgentScanResult(result);
+        setDigitalTwinData(buildTwinDataFromAgentResult(result, vitalsSnapshot, mlResult));
         setAgentScanLoading(false);
         return;
       } catch (err) {
@@ -546,6 +642,14 @@ export default function PatientDashboard({ userId, onLogout }) {
                   <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#10b981', textAlign: 'center' }}>{inputBpSystolic}/{inputBpDiastolic}</div>
                 </div>
               </div>
+            </div>
+
+            {/* Digital Twin Visualization */}
+            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem', border: '2px solid #e9d5ff' }}>
+              <h3 style={{ margin: '0 0 1rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🧬</span> Interactive Digital Twin
+              </h3>
+              <DigitalTwin scanData={digitalTwinData} isScanning={agentScanLoading} />
             </div>
 
             {/* ML Results */}
