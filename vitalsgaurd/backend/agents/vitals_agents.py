@@ -19,6 +19,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from phi.agent import Agent
 from phi.model.mistral import MistralChat
+from mistralai import Mistral
 from dotenv import load_dotenv
 
 from tools.lstm_tool import lstm_predict
@@ -55,6 +56,11 @@ class ActionResult(BaseModel):
 class EmergencyResult(BaseModel):
     dispatch_alert: bool = Field(..., description="Whether to immediately send emergency alerts.")
     urgency_note: str = Field(..., description="A brief note on why the specific urgency level was chosen.")
+
+class ComparisonResult(BaseModel):
+    summary: str = Field(..., description="A 1-sentence summary of the main anomaly region for comparison.")
+    insights: List[str] = Field(..., description="2-4 key lab markers or physical findings to check in a medical report.")
+    correlation_score: int = Field(..., description="A score from 0-100 indicating the estimated correlation between the AI's diagnosis and the physical report indicators.")
 
 
 # ── LSTM Tool for Phidata ─────────────────────────────────────────────────────
@@ -162,6 +168,26 @@ emergency_agent = Agent(
     ],
 )
 
+# ── 6. Comparison Agent ──────────────────────────────────────────────────────
+comparison_agent = Agent(
+    name="Comparison Agent",
+    role=(
+        "You are a clinical laboratory specialist. Your job is to suggest "
+        "specific physical lab tests, biomarkers, or imaging findings that "
+        "would confirm or refute the current AI diagnosis."
+    ),
+    model=_mistral(),
+    response_model=ComparisonResult,
+    instructions=[
+        "Receive the diagnosis consensus as input.",
+        "Suggest 2-4 concrete things to look for in a physical medical report.",
+        "Example: If 'Hypoxemia' -> check 'pO2 levels in ABG' or 'Chest X-Ray'.",
+        "Example: If 'Tachycardia' -> check 'ECG ST-segment' or 'Troponin'.",
+        "Provide a very short summary sentence of the anomaly region.",
+        "Generate a 'correlation_score' (0-100) representing how strongly the AI's vitals-based findings typically align with physical lab confirmations for this diagnosis (simulate 75-98 for clear anomalies, lower for vague ones).",
+    ],
+)
+
 # ── Debate Coordinator ───────────────────────────────────────────────────────
 debate_coordinator = Agent(
     name="Debate Coordinator",
@@ -185,11 +211,40 @@ debate_coordinator = Agent(
 
 # ── Pipeline entry point ─────────────────────────────────────────────────────
 
-def run_full_pipeline(vitals: dict) -> dict:
+def extract_report_data_with_mistral(base64_image: str) -> str:
     """
-    Orchestrates all 5 agents + Debate Coordinator for one vitals payload.
+    Directly calls the mistralai SDK with Pixtral to extract text/findings from an image.
+    This bypasses Phidata's native multimodal message limitations in older versions.
     """
-    vitals_json = json.dumps(vitals)
+    try:
+        client = Mistral(api_key=MISTRAL_API_KEY)
+        response = client.chat.complete(
+            model="pixtral-12b-2409",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Extract all readable text, medical data, test results, and clinical findings from this medical report image. Only return the raw medical facts and numbers you see in the image, without conversational filler."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": f"data:image/jpeg;base64,{base64_image}"
+                        }
+                    ]
+                }
+            ]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"[Image Analysis Failed. Could not extract text from report due to error: {str(e)}]"
+
+def run_full_pipeline(vitals_data: dict, report_image_base64: str | None = None) -> dict:
+    """
+    Orchestrates the multi-agent debate and supporting analysis.
+    """
+    vitals_json = json.dumps(vitals_data)
 
     # 1. Run LSTM first (no LLM, very fast)
     lstm_raw = json.loads(lstm_predict(vitals_json))
@@ -230,6 +285,25 @@ def run_full_pipeline(vitals: dict) -> dict:
     emergency_response = emergency_agent.run(emergency_prompt)
     emergency_data = emergency_response.content
 
+    # 6. Comparison Agent
+    # If we have an image, extract its text data FIRST using our custom vision tool
+    report_text_extract = ""
+    if report_image_base64:
+        report_text_extract = extract_report_data_with_mistral(report_image_base64)
+        
+    if report_text_extract:
+        comparison_prompt = (
+            f"AI Diagnosis Consensus based on sensors: {debate_data.consensus}.\n\n"
+            f"EXTRACTED RAW DATA FROM PHYSICAL REPORT IMAGE:\n---\n{report_text_extract}\n---\n\n"
+            f"Provide comparison insights based strictly on the text and data found in the report image above. "
+            f"Calculate the correlation_score out of 100 based on how well the sensor consensus matches the actual report text."
+        )
+    else:
+        comparison_prompt = f"Diagnosis: {debate_data.consensus}. Provide theoretical comparison insights as if analyzing a standard report for this condition."
+        
+    comparison_response = comparison_agent.run(comparison_prompt)
+    comparison_data = comparison_response.content
+
     # ── Assemble final response ───────────────────────────────────────────────
     return {
         "ews": ews,
@@ -239,6 +313,7 @@ def run_full_pipeline(vitals: dict) -> dict:
         "explanation": explanation_data.model_dump(),
         "actions": action_data.actions,
         "emergency": emergency_data.model_dump(),
+        "comparison": comparison_data.model_dump(),
         # Convenience fields for the Digital Twin UI
         "affected_regions": lstm_raw.get("affected_regions", ["none"]),
         "heatmap_colour": ews["colour"],

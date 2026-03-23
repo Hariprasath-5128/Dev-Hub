@@ -46,9 +46,20 @@ const situationDescriptions = {
 };
 
 function deriveRegionFromAgentAnswer(agentResult, fallbackCondition = '') {
-  const combinedText = [
+  // 1. First prioritize the explicitly predicted condition or UI label
+  const primaryKeys = [
     agentResult?.condition,
     agentResult?.ui_label,
+    fallbackCondition
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (primaryKeys.includes('brain') || primaryKeys.includes('neuro') || primaryKeys.includes('stroke')) return 'brain';
+  if (primaryKeys.includes('heart') || primaryKeys.includes('cardia') || primaryKeys.includes('arrhythmia') || primaryKeys.includes('myocardial')) return 'heart';
+  if (primaryKeys.includes('lung') || primaryKeys.includes('respiratory') || primaryKeys.includes('hypox') || primaryKeys.includes('asthma')) return 'lungs';
+  if (primaryKeys.includes('fever') || primaryKeys.includes('sepsis') || primaryKeys.includes('infection')) return 'body';
+
+  // 2. Fall back to combined text search, but avoid common vitals words like 'spo2' or 'temperature'
+  const combinedText = [
     agentResult?.consensus,
     agentResult?.voice_summary,
     agentResult?.debate?.monitoring_view,
@@ -59,21 +70,13 @@ function deriveRegionFromAgentAnswer(agentResult, fallbackCondition = '') {
     ...(agentResult?.actions || [])
   ].filter(Boolean).join(' ').toLowerCase();
 
-  const baseline = (fallbackCondition || '').toLowerCase();
-  const text = `${combinedText} ${baseline}`;
+  const text = `${primaryKeys} ${combinedText}`;
 
-  if (text.includes('brain') || text.includes('neuro') || text.includes('seizure') || text.includes('stroke')) {
-    return 'brain';
-  }
-  if (text.includes('lung') || text.includes('respiratory') || text.includes('hypox') || text.includes('spo2') || text.includes('oxygen')) {
-    return 'lungs';
-  }
-  if (text.includes('fever') || text.includes('sepsis') || text.includes('temperature') || text.includes('systemic')) {
-    return 'body';
-  }
-  if (text.includes('heart') || text.includes('tachy') || text.includes('brady') || text.includes('cardia') || text.includes('arrhythm')) {
-    return 'heart';
-  }
+  if (text.includes('seizure') || text.includes('neurological')) return 'brain';
+  if (text.includes('respiratory failure') || text.includes('pulmonary')) return 'lungs';
+  if (text.includes('systemic') || text.includes('septic')) return 'body';
+  
+  // Default fallback
   return 'heart';
 }
 
@@ -146,6 +149,10 @@ export default function PatientDashboard({ userId, onLogout }) {
   const [mlResult, setMlResult] = useState(null);
   const [severityScore, setSeverityScore] = useState(0);
   const [agentScanLoading, setAgentScanLoading] = useState(false);
+  
+  // Uploaded Report State
+  const [uploadedReportPreview, setUploadedReportPreview] = useState(null);
+  const [uploadedReportBase64, setUploadedReportBase64] = useState(null);
   const [agentScanError, setAgentScanError] = useState('');
   const [agentScanResult, setAgentScanResult] = useState(null);
   const [digitalTwinData, setDigitalTwinData] = useState({
@@ -452,7 +459,8 @@ export default function PatientDashboard({ userId, onLogout }) {
       diastolic_bp: Number(inputBpDiastolic),
       bp_systolic: Number(inputBpSystolic),
       bp_diastolic: Number(inputBpDiastolic),
-      ecg_irregularity: Number((Math.min(0.95, Math.max(0.05, severityScore / 100))).toFixed(2))
+      ecg_irregularity: Number((Math.min(0.95, Math.max(0.05, severityScore / 100))).toFixed(2)),
+      report_image: uploadedReportBase64 // Pass the Base64 image for Vision analysis
     };
 
     const vitalsSnapshot = {
@@ -562,7 +570,7 @@ export default function PatientDashboard({ userId, onLogout }) {
           <h1 style={{ margin: 0, color: '#7C3AED', fontSize: '1.5rem', fontWeight: 'bold' }}>Patient Dashboard</h1>
         </div>
         <nav style={{ display: 'flex', gap: '2rem', justifyContent: 'center', flex: 1 }}>
-          {['Dashboard', 'Interactive Analyzer', 'Appointments', 'Settings'].map(tab => (
+          {['Dashboard', 'Interactive Analyzer', 'Report Analysis', 'Appointments', 'Settings'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab.toLowerCase())} style={{ background: 'none', border: 'none', color: activeTab === tab.toLowerCase() ? '#7C3AED' : '#999', cursor: 'pointer', fontSize: '0.95rem', padding: '0.5rem 0', borderBottom: activeTab === tab.toLowerCase() ? '2px solid #7C3AED' : 'none', transition: 'all 0.3s' }}>{tab}</button>
           ))}
         </nav>
@@ -960,7 +968,7 @@ export default function PatientDashboard({ userId, onLogout }) {
               )}
             </div>
 
-            {/* Phidata Agent-Debate AI Scan - same style as Doctor Dashboard */}
+            {/* AI Multi-Agent Scan - same style as Doctor Dashboard */}
             <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                 <h3 style={{ margin: 0, color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -971,7 +979,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                   disabled={agentScanLoading}
                   style={{ padding: '0.6rem 1.2rem', backgroundColor: '#7C3AED', color: 'white', border: 'none', borderRadius: '8px', cursor: agentScanLoading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
                 >
-                  {agentScanLoading ? 'Scanning Patient...' : 'Run Phidata Agent Scan ✨'}
+                  {agentScanLoading ? 'Scanning Patient...' : 'Run AI Agent Scan ✨'}
                 </button>
               </div>
 
@@ -1047,6 +1055,156 @@ export default function PatientDashboard({ userId, onLogout }) {
                 </>
               )}
             </div>
+          </>
+        ) : activeTab === 'report analysis' ? (
+          <>
+            {/* ==================== REPORT ANALYSIS (SIDE-BY-SIDE) ==================== */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+              
+              {/* Left Column: Upload Report */}
+              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📄</span> Upload Medical Report
+                </h3>
+                <p style={{ color: '#666', fontSize: '0.95rem', marginBottom: '1.5rem' }}>Upload a physical report (e.g., Blood Test, ECG, X-Ray) to compare visually with the real-time AI diagnosis.</p>
+                
+                <div style={{ padding: '2rem', border: '2px dashed #cbd5e1', borderRadius: '12px', textAlign: 'center', backgroundColor: '#f8fafc', marginBottom: '1.5rem', cursor: 'pointer' }} onClick={() => document.getElementById('report-input').click()}>
+                  <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📤</div>
+                  <strong style={{ color: '#334155' }}>Click to Upload Report</strong>
+                  <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>Supports image formats (PNG, JPG)</p>
+                  <input 
+                    id="report-input" 
+                    type="file" 
+                    accept="image/*" 
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        setUploadedReportPreview(URL.createObjectURL(file));
+                        
+                        // Convert to Base64 for the Vision Agent
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          const base64String = reader.result.replace(/^data:image\/[a-z]+;base64,/, "");
+                          setUploadedReportBase64(base64String);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                </div>
+
+                {uploadedReportPreview && (
+                  <div style={{ flex: 1, backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
+                    <img src={uploadedReportPreview} alt="Uploaded Report" style={{ maxWidth: '100%', maxHeight: '500px', objectFit: 'contain', borderRadius: '4px' }} />
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: AI Diagnosis Output */}
+              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>⚖️</span> AI Agent Analysis
+                </h3>
+                
+                {agentScanResult ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {/* Diagnosis Agent Summary */}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f472b6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🩺</div>
+                        <h4 style={{ margin: 0, color: '#f472b6', fontSize: '1.1rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Diagnosis Agent View</h4>
+                      </div>
+                      <div style={{ padding: '1.2rem', backgroundColor: '#fdf2f8', borderRadius: '12px', borderLeft: '5px solid #f472b6' }}>
+                        <p style={{ margin: 0, color: '#374151', fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{agentScanResult.debate?.diagnosis_view}</p>
+                      </div>
+                    </div>
+
+                    {/* Consensus/Explanation Summary */}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#c084fc', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🤝</div>
+                        <h4 style={{ margin: 0, color: '#c084fc', fontSize: '1.1rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Multi-Agent Consensus</h4>
+                      </div>
+                      <div style={{ padding: '1.2rem', backgroundColor: '#faf5ff', borderRadius: '12px', borderLeft: '5px solid #c084fc' }}>
+                        <p style={{ margin: 0, color: '#374151', fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{agentScanResult.debate?.consensus || agentScanResult.consensus}</p>
+                      </div>
+                    </div>
+
+                    {/* Action Agent Advice */}
+                    {agentScanResult.actions && agentScanResult.actions.length > 0 && (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
+                          <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#22c55e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>⚡</div>
+                          <h4 style={{ margin: 0, color: '#22c55e', fontSize: '1.1rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Recommended Actions</h4>
+                        </div>
+                        <div style={{ padding: '1.2rem', backgroundColor: '#f0fdf4', borderRadius: '12px', borderLeft: '5px solid #22c55e' }}>
+                          <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#374151', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                            {agentScanResult.actions.map((action, i) => (
+                              <li key={i} style={{ marginBottom: '0.5rem' }}>{action}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '4rem 2rem', color: '#999' }}>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '1rem', opacity: 0.5 }}>🤖</div>
+                    <p style={{ fontSize: '1.1rem' }}>No active AI Agent Scan.</p>
+                    <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>Navigate to the <strong>Interactive Analyzer</strong> and click <strong>"Run AI Agent Scan"</strong> first to generate analysis for comparison here.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* AI Comparison Summary - Automatic Analysis (Backend Agent) */}
+            {agentScanResult && (
+              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '2px solid #7C3AED', marginTop: '1.5rem' }}>
+                <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🧠</span> AI Comparison Agent Analysis
+                </h3>
+                
+                {agentScanResult.comparison ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem', alignItems: 'center' }}>
+                      <div style={{ textAlign: 'center', padding: '1.5rem', background: '#f5f3ff', borderRadius: '12px', border: '1px solid #ddd6fe' }}>
+                        <div style={{ fontSize: '0.85rem', color: '#7C3AED', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5rem' }}>AI Summary</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e293b', lineHeight: 1.4 }}>
+                          {agentScanResult.comparison.summary}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center', padding: '1.5rem', background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)', borderRadius: '12px', color: '#fff', boxShadow: '0 4px 12px rgba(124, 58, 237, 0.2)' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5rem', opacity: 0.9 }}>Matching Correlation Score</div>
+                        <div style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{agentScanResult.comparison.correlation_score}%</div>
+                        <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '4px', marginTop: '1rem', overflow: 'hidden' }}>
+                          <div style={{ width: `${agentScanResult.comparison.correlation_score}%`, height: '100%', backgroundColor: '#fff', borderRadius: '4px' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '1rem' }}>Key Clinical Markers for Comparison:</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        {(agentScanResult.comparison.insights || []).map((insight, idx) => (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '0.9rem', color: '#475569', background: '#fff', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            <span style={{ color: '#7C3AED' }}>•</span>
+                            {insight}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '1rem', color: '#94a3b8' }}>
+                    <p style={{ margin: 0 }}>⚠️ Comparison data missing. Please re-run the <strong>AI Agent Scan</strong> in the Interactive Analyzer to fetch new agent insights.</p>
+                  </div>
+                )}
+
+                <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#64748b', fontStyle: 'italic' }}>
+                  * This is an automated medical comparison generated by the Phidata AI Agent.
+                </div>
+              </div>
+            )}
           </>
         ) : activeTab === 'appointments' ? (
           <>

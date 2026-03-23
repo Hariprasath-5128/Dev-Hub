@@ -43,6 +43,7 @@ class VitalsPayload(BaseModel):
     spo2: float             = Field(..., ge=0,   le=100,  description="Oxygen saturation %")
     temperature: float      = Field(..., ge=25,  le=45,   description="Body temp °C")
     ecg_irregularity: float = Field(0.0, ge=0.0, le=1.0, description="ECG anomaly score 0-1")
+    report_image: str | None = Field(None, description="Base64 encoded medical report image for Vision analysis")
     # Optional trend data (last N readings)
     history: list[dict] | None = Field(None, description="List of past VitalsPayload dicts")
 
@@ -163,11 +164,12 @@ async def analyze_vitals(payload: VitalsPayload):
     Runs the Phidata agent debate, generates explanation, action plan,
     emergency decision, and Digital Twin UI metadata.
     """
-    vitals = payload.model_dump(exclude={"history"})
+    vitals = payload.model_dump(exclude={"history", "report_image"})
+    report_image = payload.report_image
 
     try:
         # Run blocking agent pipeline in a thread so we don't block the event loop
-        result = await asyncio.to_thread(run_full_pipeline, vitals)
+        result = await asyncio.to_thread(run_full_pipeline, vitals, report_image)
     except Exception as exc:
         logger.exception("Agent pipeline failed")
         raise HTTPException(status_code=500, detail=str(exc))
