@@ -1,0 +1,18 @@
+Track 5: VIT Internship Special Track
+AI-Based Vital Analysis & Health Prediction System
+
+Implemented foundation in this folder:
+1) Real-time/sample vital ingestion utilities (via existing mockVitals + analyzers)
+2) Early warning scoring (stable/warning/critical)
+3) Trend-based prediction (2h/6h projections)
+4) Silent Risk Detector (hidden pattern finder)
+5) Health Anomaly Fingerprint matcher
+6) Agentic AI debate (monitoring/explanation/emergency/diagnosis/action)
+7) Emergency alert payload + simulated dispatcher
+8) Digital twin region mapper + voice summary text
+
+Next integration targets in UI:
+- Doctor dashboard: show consensus + disagreement score
+- Emergency mode trigger: auto-send alert on critical consensus
+- Digital twin overlay: highlight affected body regions
+- Report compare mode: doctor vs AI companion output
