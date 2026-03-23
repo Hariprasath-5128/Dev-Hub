@@ -10,6 +10,12 @@ const userRoleMap = {
   'patient1@gmail.com': 'patient',
 };
 
+const demoAccounts = {
+  doctor: { email: 'doctor1@gmail.com', password: 'doctor1' },
+  patient: { email: 'patient1@gmail.com', password: 'patient1' },
+  admin: { email: 'admin1@gmail.com', password: 'admin1' },
+};
+
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,7 +34,7 @@ export default function Login({ onLogin }) {
       setRole(userRoleMap[lowerEmail]);
     } else {
       setAssignedRole(null);
-      setRole('patient'); // Default fallback
+      setRole('patient');
     }
   }, [email]);
 
@@ -40,12 +46,11 @@ export default function Login({ onLogin }) {
     try {
       const lowerEmail = email.toLowerCase();
 
-      // Check if this email has a specific role assignment
       if (userRoleMap[lowerEmail]) {
         const expectedRole = userRoleMap[lowerEmail];
         if (role !== expectedRole) {
           throw new Error(
-            `⚠️ Email ${email} can only login as "${expectedRole.charAt(0).toUpperCase() + expectedRole.slice(1)}". Please select the correct role.`
+            `Email ${email} can only login as "${expectedRole.charAt(0).toUpperCase() + expectedRole.slice(1)}".`
           );
         }
       }
@@ -58,185 +63,283 @@ export default function Login({ onLogin }) {
       if (authError) throw authError;
 
       if (data.user) {
-        // Get the actual role from user metadata
         const userRole = data.user.user_metadata?.role || role;
-        
         onLogin({ role: userRole, userId: data.user.id, email: data.user.email });
         navigate(`/${userRole}`);
       }
     } catch (err) {
-      setError(err.message || 'Login failed. Please try again.');
+      setError(err.message || 'Login failed.');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleSignUp(e) {
-    e.preventDefault();
+  async function handleDemoLogin(demoRole) {
+    setEmail(demoAccounts[demoRole].email);
+    const pass = demoAccounts[demoRole].password;
+    setPassword(pass);
+    
+    setTimeout(() => {
+      const form = new FormData();
+      handleLogin({ 
+        preventDefault: () => {}, 
+        currentTarget: { email: { value: demoAccounts[demoRole].email }, password: { value: pass } } 
+      });
+    }, 0);
+  }
+
+  async function quickLogin(demoRole) {
     setError('');
     setLoading(true);
+    const account = demoAccounts[demoRole];
 
     try {
-      if (password.length < 6) {
-        throw new Error('Password must be at least 6 characters');
-      }
-
-      const lowerEmail = email.toLowerCase();
-
-      // Prevent signup with pre-assigned emails
-      if (userRoleMap[lowerEmail]) {
-        throw new Error(
-          `This email (${email}) is already registered. Please login instead.`
-        );
-      }
-
-      const { data, error: authError } = await supabase.auth.signUp({
-        email: lowerEmail,
-        password,
-        options: {
-          data: {
-            role: role,
-          },
-        },
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: account.email,
+        password: account.password,
       });
 
       if (authError) throw authError;
 
-      setError('');
-      alert('✅ Sign up successful! You can now login with your credentials.');
-      setIsSignUp(false);
-      setEmail('');
-      setPassword('');
+      if (data.user) {
+        const userRole = userRoleMap[account.email] || demoRole;
+        onLogin({ role: userRole, userId: data.user.id, email: data.user.email });
+        navigate(`/${userRole}`);
+      }
     } catch (err) {
-      setError(err.message || 'Sign up failed. Please try again.');
+      setError(`Failed to login as ${demoRole}`);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="login-shell">
-      <section className="login-card">
-        <h1>VitalsGuard AI</h1>
-        <p>{isSignUp ? 'Create Account' : 'Login'} as Hospital Admin, Doctor, or Patient</p>
-        
-        {error && <div className="error-message" style={{ color: '#fecaca', marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#7f1d1d', borderRadius: '6px', fontSize: '0.9em', border: '1px solid #dc2626' }}>
-          {error}
-        </div>}
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Left Side - Purple Gradient */}
+      <div style={{
+        width: '40%',
+        background: 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)',
+        color: 'white',
+        padding: '60px 40px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+      }}>
+        <div>
+          <div style={{ fontSize: '28px', marginBottom: '8px' }}>💊</div>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '28px', fontWeight: 'bold' }}>VitalsGuard</h1>
+          <p style={{ margin: 0, fontSize: '13px', opacity: 0.9 }}>CLINICAL HEALTH AI</p>
+        </div>
 
-        {assignedRole && !isSignUp && (
-          <div style={{ 
-            color: '#dcfce7', 
-            marginBottom: '1rem', 
-            padding: '0.75rem', 
-            backgroundColor: '#14532d', 
-            borderRadius: '6px',
-            fontSize: '0.9em',
-            border: '1px solid #22c55e'
-          }}>
-            ✓ Role automatically assigned: <strong>{assignedRole.charAt(0).toUpperCase() + assignedRole.slice(1)}</strong>
+        <div>
+          <h2 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '20px', lineHeight: '1.2' }}>
+            Smarter health monitoring for every patient.
+          </h2>
+          <p style={{ fontSize: '14px', opacity: 0.9, marginBottom: '40px' }}>
+            AI-powered vital sign tracking, real-time alerts, and clinical-grade management — all in one platform.
+          </p>
+
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            <li style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px', fontSize: '14px' }}>
+              <span style={{ fontSize: '20px' }}>⚡</span>
+              <span>AI-powered real-time vitals monitoring</span>
+            </li>
+            <li style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px', fontSize: '14px' }}>
+              <span style={{ fontSize: '20px' }}>🏥</span>
+              <span>Clinical-grade health protocols built-in</span>
+            </li>
+            <li style={{ display: 'flex', alignItems: 'center', gap: '15px', fontSize: '14px' }}>
+              <span style={{ fontSize: '20px' }}>🔐</span>
+              <span>Role-based access for your entire team</span>
+            </li>
+          </ul>
+        </div>
+
+        <p style={{ fontSize: '12px', opacity: 0.8, margin: 0 }}>© 2026 VitalsGuard. All rights reserved.</p>
+      </div>
+
+      {/* Right Side - Login Form */}
+      <div style={{
+        width: '60%',
+        padding: '60px 40px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        background: '#f5f3ff',
+      }}>
+        <div style={{ width: 'min(380px, 100%)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+            <div style={{ width: '50px', height: '50px', background: '#7C3AED', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', margin: '0 auto 16px' }}>
+              💊
+            </div>
+            <h1 style={{ margin: '0 0 8px 0', fontSize: '28px', fontWeight: 'bold', color: '#1f2937' }}>
+              Welcome Back
+            </h1>
+            <p style={{ margin: 0, fontSize: '14px', color: '#999' }}>
+              Sign in to VitalsGuard — Continue your journey
+            </p>
           </div>
-        )}
-        
-        <form onSubmit={isSignUp ? handleSignUp : handleLogin}>
-          <label>
-            Role
-            <select 
-              value={role} 
-              onChange={e => setRole(e.target.value)} 
-              disabled={loading || (assignedRole && !isSignUp ? true : false)}
-              style={{ opacity: assignedRole && !isSignUp ? 0.7 : 1, cursor: assignedRole && !isSignUp ? 'not-allowed' : 'pointer' }}
-            >
-              <option value="admin">Hospital Admin</option>
-              <option value="doctor">Doctor</option>
-              <option value="patient">Patient</option>
-            </select>
-            {assignedRole && !isSignUp && <small style={{ display: 'block', color: '#94a3b8', marginTop: '4px', fontSize: '0.8em' }}>✓ Auto-assigned role</small>}
-          </label>
-          
-          <label>
-            Email
+
+          {error && (
+            <div style={{
+              color: '#dc2626',
+              marginBottom: '1rem',
+              padding: '12px',
+              backgroundColor: '#fee2e2',
+              borderRadius: '8px',
+              fontSize: '13px',
+              border: '1px solid #fecaca'
+            }}>
+              {error}
+            </div>
+          )}
+
+          {assignedRole && !isSignUp && (
+            <div style={{
+              color: '#059669',
+              marginBottom: '1rem',
+              padding: '12px',
+              backgroundColor: '#ecfdf5',
+              borderRadius: '8px',
+              fontSize: '13px',
+              border: '1px solid #a7f3d0'
+            }}>
+              ✓ Role: <strong>{assignedRole.charAt(0).toUpperCase() + assignedRole.slice(1)}</strong>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin}>
+            <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '600', fontSize: '14px' }}>
+              Your email
+            </label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder={isSignUp ? 'Enter your email' : 'admin1@gmail.com'}
-              disabled={loading}
+              placeholder="name@example.com"
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #ddd',
+                borderRadius: '8px',
+                marginBottom: '1.2rem',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+              }}
               required
             />
-          </label>
-          
-          <label>
-            Password
+
+            <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '600', fontSize: '14px' }}>
+              Password
+            </label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder={isSignUp ? 'At least 6 characters' : 'Enter password'}
-              disabled={loading}
+              placeholder="••••••••"
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #ddd',
+                borderRadius: '8px',
+                marginBottom: '1.5rem',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+              }}
               required
             />
-          </label>
-          
-          <button type="submit" disabled={loading} style={{ marginTop: '0.5rem' }}>
-            {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Login')}
-          </button>
-        </form>
 
-        {!isSignUp && (
-          <div style={{ 
-            marginTop: '1.5rem', 
-            padding: '1rem', 
-            backgroundColor: '#1a2f48', 
-            borderRadius: '8px', 
-            fontSize: '0.8em',
-            border: '1px solid #2a4265'
-          }}>
-            <strong style={{ color: '#cbd5e1' }}>📋 Test Accounts:</strong>
-            <div style={{ marginTop: '0.8rem', lineHeight: '1.8', color: '#cbd5e1' }}>
-              <div style={{ marginBottom: '0.5rem' }}>
-                <span style={{ color: '#38bdf8' }}>👨‍💼 Admin:</span> admin1@gmail.com / admin1
-              </div>
-              <div style={{ marginBottom: '0.5rem' }}>
-                <span style={{ color: '#38bdf8' }}>👨‍⚕️ Doctor:</span> doctor1@gmail.com / doctor1
-              </div>
-              <div style={{ marginBottom: '0.5rem' }}>
-                <span style={{ color: '#38bdf8' }}>👨‍⚕️ Doctor:</span> doctor2@gmail.com / doctor2
-              </div>
-              <div>
-                <span style={{ color: '#38bdf8' }}>👤 Patient:</span> patient1@gmail.com / patient1
-              </div>
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                background: '#7C3AED',
+                fontWeight: '700',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '16px',
+                marginBottom: '20px',
+                opacity: loading ? 0.7 : 1,
+                transition: 'all 0.3s',
+              }}
+              onMouseEnter={e => !loading && (e.target.style.background = '#6D28D9')}
+              onMouseLeave={e => (e.target.style.background = '#7C3AED')}
+            >
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '12px', color: '#666', marginBottom: '12px' }}>Demo accounts</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+              <button
+                onClick={() => quickLogin('doctor')}
+                disabled={loading}
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  color: '#7C3AED',
+                  fontWeight: '500',
+                  transition: 'all 0.3s',
+                }}
+                onMouseEnter={e => !loading && (e.target.style.borderColor = '#7C3AED', e.target.style.background = '#f5f3ff')}
+                onMouseLeave={e => (e.target.style.borderColor = '#e5e7eb', e.target.style.background = '#fff')}
+              >
+                👨‍⚕️ Doctor
+              </button>
+              <button
+                onClick={() => quickLogin('patient')}
+                disabled={loading}
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  color: '#7C3AED',
+                  fontWeight: '500',
+                  transition: 'all 0.3s',
+                }}
+                onMouseEnter={e => !loading && (e.target.style.borderColor = '#7C3AED', e.target.style.background = '#f5f3ff')}
+                onMouseLeave={e => (e.target.style.borderColor = '#e5e7eb', e.target.style.background = '#fff')}
+              >
+                👤 Patient
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
+              <button
+                onClick={() => quickLogin('admin')}
+                disabled={loading}
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  color: '#7C3AED',
+                  fontWeight: '500',
+                  transition: 'all 0.3s',
+                }}
+                onMouseEnter={e => !loading && (e.target.style.borderColor = '#7C3AED', e.target.style.background = '#f5f3ff')}
+                onMouseLeave={e => (e.target.style.borderColor = '#e5e7eb', e.target.style.background = '#fff')}
+              >
+                🛡️ Admin
+              </button>
             </div>
           </div>
-        )}
-        
-        <p style={{ marginTop: '1rem', textAlign: 'center', color: '#cbd5e1', fontSize: '0.9em' }}>
-          {isSignUp ? 'Already have an account? ' : `Don't have an account? `}
-          <button
-            type="button"
-            onClick={() => {
-              setIsSignUp(!isSignUp);
-              setError('');
-              setEmail('');
-              setPassword('');
-              setAssignedRole(null);
-            }}
-            disabled={loading}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#38bdf8',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              padding: 0,
-              fontSize: 'inherit',
-              fontWeight: '600'
-            }}
-          >
-            {isSignUp ? 'Login' : 'Sign Up'}
-          </button>
-        </p>
-      </section>
-    </main>
+        </div>
+      </div>
+    </div>
   );
 }
