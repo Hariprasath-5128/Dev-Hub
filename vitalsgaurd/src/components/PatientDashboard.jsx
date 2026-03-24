@@ -133,6 +133,7 @@ export default function PatientDashboard({ userId, onLogout }) {
   const [mlResult, setMlResult] = useState(null);
   const [severityScore, setSeverityScore] = useState(0);
   const [agentScanLoading, setAgentScanLoading] = useState(false);
+  const [reportScanLoading, setReportScanLoading] = useState(false);
   const [agentScanError, setAgentScanError] = useState('');
   const [agentScanResult, setAgentScanResult] = useState(null);
   const [digitalTwinData, setDigitalTwinData] = useState({
@@ -265,14 +266,17 @@ export default function PatientDashboard({ userId, onLogout }) {
     }
   }, [trendResult]);
 
-  const handleRunAgentDebateScan = async () => {
-    setAgentScanLoading(true); setAgentScanError('');
+  const handleRunAgentDebateScan = async (isReportMode = false) => {
+    if (isReportMode) setReportScanLoading(true);
+    else setAgentScanLoading(true);
+    setAgentScanError('');
+
     const hrNum = Number(inputHr) || 0; const spo2Num = Number(inputSpo2) || 0; const tempNum = Number(inputTemp) || 0;
     const payload = {
       heart_rate: hrNum, spo2: spo2Num, temperature: tempNum, systolic_bp: Number(inputBpSystolic), diastolic_bp: Number(inputBpDiastolic),
       bp_systolic: Number(inputBpSystolic), bp_diastolic: Number(inputBpDiastolic),
       ecg_irregularity: Number((Math.min(0.95, Math.max(0.05, severityScore / 100))).toFixed(2)),
-      report_image: uploadedReportBase64 // Combined Vision Capability
+      report_image: isReportMode ? uploadedReportBase64 : null // Only send image if specifically requested in report mode
     };
     const vitalsSnapshot = { heart_rate: hrNum, spo2: spo2Num, temperature: tempNum, systolic_bp: Number(inputBpSystolic), diastolic_bp: Number(inputBpDiastolic) };
     try {
@@ -280,7 +284,10 @@ export default function PatientDashboard({ userId, onLogout }) {
       setAgentScanResult(result);
       setDigitalTwinData(buildTwinDataFromAgentResult(result, vitalsSnapshot, mlResult));
     } catch (err) { setAgentScanError(err.message); }
-    finally { setAgentScanLoading(false); }
+    finally {
+      if (isReportMode) setReportScanLoading(false);
+      else setAgentScanLoading(false);
+    }
   };
 
   const getStoredUsername = () => { try { const stored = localStorage.getItem('vg_user'); return stored ? JSON.parse(stored)?.username : ''; } catch { return ''; } };
@@ -418,7 +425,19 @@ export default function PatientDashboard({ userId, onLogout }) {
             <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                 <h3 style={{ margin: 0, color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}><span>🤖</span> Live AI Multi-Agent Scan</h3>
-                <button onClick={handleRunAgentDebateScan} disabled={agentScanLoading} style={{ padding: '0.6rem 1.2rem', backgroundColor: '#7C3AED', color: 'white', border: 'none', borderRadius: '8px', cursor: agentScanLoading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>{agentScanLoading ? 'Scanning...' : 'Run Phidata Agent Scan ✨'}</button>
+                <button 
+                  onClick={() => handleRunAgentDebateScan(false)} 
+                  disabled={agentScanLoading} 
+                  style={{ 
+                    padding: '0.6rem 1.2rem', 
+                    backgroundColor: agentScanLoading ? '#94a3b8' : '#7C3AED', 
+                    color: 'white', border: 'none', borderRadius: '8px', 
+                    cursor: agentScanLoading ? 'not-allowed' : 'pointer', 
+                    fontWeight: 'bold', minWidth: '200px', transition: 'all 0.3s' 
+                  }}
+                >
+                  {agentScanLoading ? '🔄 Scanning Live Vitals...' : 'Run Phidata Agent Scan ✨'}
+                </button>
               </div>
               {agentScanError && <div style={{ padding: '0.9rem 1rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#991b1b', marginBottom: '1rem' }}>{agentScanError}</div>}
               {agentScanResult && (
@@ -457,19 +476,47 @@ export default function PatientDashboard({ userId, onLogout }) {
                     }
                   }} />
                 </div>
-                {uploadedReportPreview && <img src={uploadedReportPreview} alt="Report Preview" style={{ maxWidth: '100%', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />}
+                {uploadedReportPreview && (
+                  <div style={{ position: 'relative' }}>
+                    <img src={uploadedReportPreview} alt="Report Preview" style={{ maxWidth: '100%', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
+                    <button 
+                      onClick={() => handleRunAgentDebateScan(true)}
+                      disabled={reportScanLoading}
+                      style={{ 
+                        width: '100%', marginTop: '1rem', padding: '1rem', 
+                        backgroundColor: '#7C3AED', color: 'white', border: 'none', 
+                        borderRadius: '8px', cursor: reportScanLoading ? 'not-allowed' : 'pointer', 
+                        fontWeight: 'bold', fontSize: '1rem', boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)' 
+                      }}
+                    >
+                      {reportScanLoading ? '🔄 AI Analyzing Report...' : '🔍 Analyze & Compare Report'}
+                    </button>
+                    {agentScanError && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '0.5rem', textAlign: 'center' }}>{agentScanError}</p>}
+                  </div>
+                )}
               </div>
               <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
                 <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}><span>⚖️</span> AI Analysis Summary</h3>
                 {agentScanResult ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div style={{ background: '#f0fdf4', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #22c55e' }}><strong>Consensus:</strong> {agentScanResult.debate?.consensus || agentScanResult.consensus}</div>
-                    <div style={{ background: '#fffbeb', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}><strong>Diagnosis:</strong> {agentScanResult.debate?.diagnosis_view}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '500px', overflowY: 'auto', paddingRight: '5px' }}>
+                    {[
+                      { key: 'monitoring', icon: '📈', color: '#38bdf8', label: 'Monitor', text: agentScanResult.debate?.monitoring_view },
+                      { key: 'diagnosis', icon: '🩺', color: '#f472b6', label: 'Diagnosis', text: agentScanResult.debate?.diagnosis_view },
+                      { key: 'consensus', icon: '⚖️', color: '#c084fc', label: 'Consensus', text: agentScanResult.debate?.consensus || agentScanResult.consensus },
+                      { key: 'emergency', icon: '🚨', color: '#ef4444', label: 'Emergency', text: agentScanResult.emergency?.urgency_note }
+                    ].filter(i => i.text).map(i => (
+                      <div key={i.key} style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', borderLeft: `4px solid ${i.color}`, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.4rem', color: i.color, fontWeight: '800', fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                          <span>{i.icon}</span> {i.label}
+                        </div>
+                        <p style={{ color: '#1e293b', margin: 0, fontSize: '0.9rem', lineHeight: 1.5 }}>{i.text}</p>
+                      </div>
+                    ))}
                   </div>
-                ) : <p style={{ color: '#999', textAlign: 'center' }}>No scan data available. Run Phidata scan in Interactive Analyzer.</p>}
+                ) : <p style={{ color: '#999', textAlign: 'center', marginTop: '4rem' }}>No AI Analysis yet. {uploadedReportPreview ? 'Click "Analyze & Compare Report" above.' : 'Upload a report to begin.'}</p>}
               </div>
             </div>
-            {agentScanResult?.comparison && (
+            {agentScanResult?.report_analyzed && agentScanResult.comparison && (
               <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '2px solid #7C3AED' }}>
                 <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}><span>🧠</span> Insight Correlation</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem', alignItems: 'center' }}>
@@ -480,6 +527,11 @@ export default function PatientDashboard({ userId, onLogout }) {
                   <div style={{ fontSize: '1.1rem', color: '#1e293b' }}>{agentScanResult.comparison.summary}</div>
                 </div>
               </div>
+            )}
+            {!agentScanResult?.report_analyzed && uploadedReportPreview && !reportScanLoading && (
+               <div style={{ textAlign: 'center', padding: '2rem', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                 <p style={{ color: '#64748b', margin: 0 }}>Report uploaded but not yet cross-referenced with AI vitals. Click <strong>Analyze & Compare</strong> to generate correlation score.</p>
+               </div>
             )}
           </>
         ) : activeTab === 'appointments' ? (

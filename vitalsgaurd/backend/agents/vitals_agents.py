@@ -285,16 +285,17 @@ def run_full_pipeline(vitals_data: dict, report_image_base64: str | None = None)
     emergency_response = emergency_agent.run(emergency_prompt)
     emergency_data = emergency_response.content
 
-    # 6. Comparison Agent
-    # If we have an image, extract its text data FIRST using our custom vision tool
+    report_analyzed = False
     report_text_extract = ""
-    if report_image_base64:
+    if report_image_base64 and len(report_image_base64) > 10:
         report_text_extract = extract_report_data_with_mistral(report_image_base64)
+        if "[Image Analysis Failed]" not in report_text_extract:
+            report_analyzed = True
         
     if report_text_extract:
         comparison_prompt = (
             f"AI Diagnosis Consensus based on sensors: {debate_data.consensus}.\n\n"
-            f"EXTRACTED RAW DATA FROM PHYSICAL REPORT IMAGE:\n---\n{report_text_extract}\n---\n\n"
+            f"EXTRACTED RAW DATA FROM PHYSICAL MEDICAL REPORT IMAGE:\n---\n{report_text_extract}\n---\n\n"
             f"Provide comparison insights based strictly on the text and data found in the report image above. "
             f"Calculate the correlation_score out of 100 based on how well the sensor consensus matches the actual report text."
         )
@@ -321,4 +322,5 @@ def run_full_pipeline(vitals_data: dict, report_image_base64: str | None = None)
         "voice_summary": explanation_data.voice_summary,
         "consensus": debate_data.consensus,
         "disagreement_score": debate_data.disagreement_score,
+        "report_analyzed": report_analyzed,
     }
