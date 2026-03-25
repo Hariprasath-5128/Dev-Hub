@@ -201,13 +201,20 @@ export default function PatientDashboard({ userId, onLogout }) {
   const [appointmentLoading, setAppointmentLoading] = useState(false);
   const [appointmentError, setAppointmentError] = useState('');
   const [appointmentSuccess, setAppointmentSuccess] = useState('');
+  
+  // Report Analysis State
+  const [reportImage, setReportImage] = useState(null);
+  const [reportFileName, setReportFileName] = useState('');
+  const [reportResult, setReportResult] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState('');
 
   // Local Helper: Linear Risk Score (Refined for Continuous Variation with User Weights)
   const calculateLinearRisk = (v) => {
     if (!v) return 0;
-    
+
     // Baselines from user reference
-    const n = { hr: 75, spo2: 96, temp: 37, sys: 120 }; 
+    const n = { hr: 75, spo2: 96, temp: 37, sys: 120 };
     const s = { hr: 150, spo2: 75, temp: 42, sys: 165 };
 
     // Linear Progress (User's logic)
@@ -218,17 +225,17 @@ export default function PatientDashboard({ userId, onLogout }) {
 
     // Weights from user reference
     const weights = { hr: 0.15, spo2: 0.30, temp: 0.40, sys: 0.15 };
-    
+
     // Weighted raw progress
     const weightedProgress = (hrP * weights.hr) + (spo2P * weights.spo2) + (tempP * weights.temp) + (sysP * weights.sys);
-    
+
     // Intensity curve (power of 1.5 stays lower for slight spikes, accelerates as it nears limit)
     const intensity = Math.pow(Math.min(1.0, weightedProgress), 1.5);
     const score = Math.min(100, Math.round(intensity * 100));
-    
+
     // Subtle floor for visibility
     if (score === 0 && (hrP > 0.05 || spo2P > 0.05 || tempP > 0.05 || sysP > 0.05)) return 3;
-    
+
     return score;
   };
 
@@ -238,11 +245,11 @@ export default function PatientDashboard({ userId, onLogout }) {
       setVitalsHistory(prev => {
         const last = prev[prev.length - 1] || originalLatest; const now = new Date();
         const targets = dataGenerationMode === 'spike' ? { hr: 155, spo2: 75, temp: 42.8, sys: 175, dia: 130 } : { hr: 75, spo2: 96, temp: 37.0, sys: 120, dia: 80 };
-        
+
         // Faster recovery if returning to normal from a spike
         const isRecovering = dataGenerationMode === 'normal' && (last.hr > 85 || last.spo2 < 94 || last.temp > 37.8);
-        const deltas = isRecovering 
-          ? { hr: 7.0, spo2: 4.5, temp: 0.8, sys: 6.0, dia: 6.0 } 
+        const deltas = isRecovering
+          ? { hr: 7.0, spo2: 4.5, temp: 0.8, sys: 6.0, dia: 6.0 }
           : { hr: 3.5, spo2: 2.2, temp: 0.35, sys: 3.0, dia: 3.0 };
 
         let hrVar = 0, spo2Var = 0, tempVar = 0, sysVar = 0, diaVar = 0;
@@ -266,26 +273,26 @@ export default function PatientDashboard({ userId, onLogout }) {
         };
         setCurrentHr(nextHr); setCurrentSpo2(nextSpo2); setCurrentTemp(nextTemp); setCurrentBpSystolic(nextSys); setCurrentBpDiastolic(nextDia);
         const newHistory = [...prev]; if (newHistory.length > 50) newHistory.shift();
-        
+
         // Trend-Based Range Mapping & Damping (Strictly following Trend-to-Risk Mapping)
         setSeverityScore(prevScore => {
           const trendStr = (trendResult?.trend || 'Stable').toLowerCase();
-          let target = prevScore; 
-          
-          if (trendStr === 'improving') { 
+          let target = prevScore;
+
+          if (trendStr === 'improving') {
             // Range 40 to 70
             target = 40 + (Math.random() * 30);
-          } else if (trendStr.includes('deteriorat') || trendStr.includes('worsening')) { 
+          } else if (trendStr.includes('deteriorat') || trendStr.includes('worsening')) {
             // Range 80 to 100
             target = 80 + (Math.random() * 20);
-          } else { 
+          } else {
             // Default: Stable (Range 0 to 30)
             target = Math.random() * 30;
           }
-          
+
           const diff = target - prevScore;
           // Faster damping to satisfy "sudden increase or decrease" concerns but feel smooth
-          const maxStep = 20; 
+          const maxStep = 20;
           if (Math.abs(diff) <= maxStep) return Math.round(target);
           return Math.round(prevScore + (diff > 0 ? maxStep : -maxStep));
         });
@@ -635,6 +642,61 @@ export default function PatientDashboard({ userId, onLogout }) {
     }
   };
 
+  const handleReportUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setReportFileName(file.name);
+    setReportResult(null);
+    setReportError('');
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      // Extract only the base64 string without the prefix
+      const base64String = reader.result.split(',')[1];
+      setReportImage(base64String);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRunReportAnalysis = async () => {
+    if (!reportImage) {
+      setReportError('Please upload a medical report image first.');
+      return;
+    }
+
+    setReportLoading(true);
+    setReportError('');
+    setReportResult(null);
+
+    const payload = {
+      heart_rate: Number(inputHr) || 0,
+      spo2: Number(inputSpo2) || 0,
+      temperature: Number(inputTemp) || 0,
+      systolic_bp: Number(inputBpSystolic),
+      diastolic_bp: Number(inputBpDiastolic),
+      ecg_irregularity: Number((Math.min(0.95, Math.max(0.05, severityScore / 100))).toFixed(2)),
+      report_image: reportImage
+    };
+
+    try {
+      const result = await postJsonWithFallback(
+        API_BASES.map(base => `${base}/analyze-vitals`),
+        payload
+      );
+      
+      if (result.comparison) {
+        setReportResult(result.comparison);
+      } else {
+        throw new Error('Analysis completed but comparison data is missing.');
+      }
+    } catch (err) {
+      setReportError(err.message || 'Report analysis failed.');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
   const healthMetrics = [
     { title: 'Heart Rate', value: currentHr, unit: 'BPM', icon: '❤️', status: currentHr > 100 ? 'critical' : 'good' },
     { title: 'Temperature', value: currentTemp, unit: '°C', icon: '🌡️', status: currentTemp > 38 ? 'warning' : 'good' },
@@ -661,7 +723,7 @@ export default function PatientDashboard({ userId, onLogout }) {
           <h1 style={{ margin: 0, color: '#7C3AED', fontSize: '1.5rem', fontWeight: 'bold' }}>Patient Dashboard</h1>
         </div>
         <nav style={{ display: 'flex', gap: '2rem', justifyContent: 'center', flex: 1 }}>
-          {['Dashboard', 'Interactive Analyzer', 'Appointments', 'Settings'].map(tab => (
+          {['Dashboard', 'Interactive Analyzer', 'Report Analysis', 'Appointments', 'Settings'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab.toLowerCase())} style={{ background: 'none', border: 'none', color: activeTab === tab.toLowerCase() ? '#7C3AED' : '#999', cursor: 'pointer', fontSize: '0.95rem', padding: '0.5rem 0', borderBottom: activeTab === tab.toLowerCase() ? '2px solid #7C3AED' : 'none', transition: 'all 0.3s' }}>{tab}</button>
           ))}
         </nav>
@@ -1059,6 +1121,121 @@ export default function PatientDashboard({ userId, onLogout }) {
               )}
             </div>
           </>
+        ) : activeTab === 'report analysis' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+              {/* Left: Upload Section */}
+              <div className="premium-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.25rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📄</span> Upload Medical Report
+                </h3>
+                <p style={{ color: '#666', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Upload high-resolution report images for AI comparison.</p>
+                
+                <div style={{ 
+                  border: '2px dashed #cbd5e1', 
+                  borderRadius: '16px', 
+                  padding: '2rem', 
+                  backgroundColor: '#f8fafc',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  transition: 'all 0.3s'
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
+                  if (file) handleReportUpload({ target: { files: [file] } });
+                }}
+                onClick={() => document.getElementById('report-upload-input').click()}
+                >
+                  <input id="report-upload-input" type="file" accept="image/*" onChange={handleReportUpload} style={{ display: 'none' }} />
+                  <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📤</div>
+                  <div style={{ fontWeight: '700', color: '#475569', fontSize: '0.95rem' }}>
+                    {reportFileName ? reportFileName : 'Click to Upload Report'}
+                  </div>
+                </div>
+
+                {reportImage && (
+                  <div style={{ marginTop: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ flex: 1, overflow: 'hidden', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', marginBottom: '1rem' }}>
+                      <img src={`data:image/jpeg;base64,${reportImage}`} alt="Report Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                      <button 
+                        onClick={() => { setReportImage(null); setReportFileName(''); setReportResult(null); }}
+                        style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', color: '#64748b', fontWeight: '700', cursor: 'pointer', fontSize: '0.85rem' }}
+                      >
+                        Clear
+                      </button>
+                      <button 
+                        onClick={handleRunReportAnalysis}
+                        disabled={reportLoading}
+                        style={{ flex: 2, padding: '0.6rem', borderRadius: '8px', border: 'none', background: '#7C3AED', color: 'white', fontWeight: '700', cursor: reportLoading ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}
+                      >
+                        {reportLoading ? 'Analyzing...' : 'Run Cross-Analysis ✨'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {reportError && <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#fef2f2', borderRadius: '8px', color: '#991b1b', fontSize: '0.85rem', fontWeight: '600' }}>⚠️ {reportError}</div>}
+              </div>
+
+              {/* Right: AI Analysis Summary (from Sensors) */}
+              <div className="premium-card" style={{ padding: '2rem' }}>
+                <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.25rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🤖</span> AI Analysis Summary
+                </h3>
+                {agentScanResult ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ padding: '1rem', background: '#f0fdf4', borderLeft: '4px solid #22c55e', borderRadius: '8px' }}>
+                      <div style={{ fontWeight: '800', color: '#166534', fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Consensus</div>
+                      <p style={{ margin: 0, color: '#374151', fontSize: '0.9rem', lineHeight: 1.5 }}>{agentScanResult.debate?.consensus || agentScanResult.consensus}</p>
+                    </div>
+                    <div style={{ padding: '1rem', background: '#fffbeb', borderLeft: '4px solid #fbbf24', borderRadius: '8px' }}>
+                      <div style={{ fontWeight: '800', color: '#92400e', fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Diagnosis</div>
+                      <p style={{ margin: 0, color: '#374151', fontSize: '0.9rem', lineHeight: 1.5 }}>{agentScanResult.debate?.diagnosis_view}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', textAlign: 'center', padding: '2rem' }}>
+                    <p>Run a Phidata Agent Scan in the 'Interactive Analyzer' tab first to see the sensor-based analysis summary here.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom: Insight Correlation Results */}
+            {reportResult ? (
+              <div className="premium-card" style={{ padding: '2rem', border: '2px solid #c084fc' }}>
+                <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.25rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🧠</span> Insight Correlation
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '2.5rem', alignItems: 'center' }}>
+                  <div style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #a855f7 100%)', padding: '2rem', borderRadius: '16px', color: 'white', textAlign: 'center', boxShadow: '0 4px 15px rgba(124, 58, 237, 0.3)' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase', opacity: 0.9, marginBottom: '0.5rem' }}>Match Score</div>
+                    <div style={{ fontSize: '4rem', fontWeight: '900', lineHeight: 1 }}>{reportResult.correlation_score}%</div>
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, color: '#334155', fontSize: '1.1rem', fontWeight: '600', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+                      {reportResult.summary}
+                    </p>
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                      {reportResult.insights && reportResult.insights.map((insight, idx) => (
+                        <div key={idx} style={{ background: '#f1f5f9', padding: '0.6rem 1rem', borderRadius: '999px', fontSize: '0.85rem', color: '#475569', fontWeight: '700', border: '1px solid #e2e8f0' }}>
+                          🔍 {insight}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="premium-card" style={{ padding: '3rem', textAlign: 'center', background: '#f8fafc', border: '1px dashed #cbd5e1' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.3 }}>🧠</div>
+                <p style={{ color: '#94a3b8', fontWeight: '600' }}>Correlation results will appear here after analysis.</p>
+              </div>
+            )}
+          </div>
         ) : activeTab === 'appointments' ? (
           <>
             <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '1.5rem' }}>
