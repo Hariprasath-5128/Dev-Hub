@@ -662,10 +662,7 @@ export default function PatientDashboard({ userId, onLogout }) {
     try {
       const username = getStoredUsername();
       const timestamp = Date.now(); // Cache busting
-
-      // Clear existing appointments for this patient as requested
-      await axios.post(`${NODE_API_BASE}/appointments/clear`, { patientId: userId });
-      console.log(`[Appointments] Requested clear for patient ${userId}`);
+      // Fetch eligibility and available slots
 
       const [eligibilityRes, doctorsRes, myRes] = await Promise.all([
         axios.get(`${NODE_API_BASE}/appointments/eligibility/${encodeURIComponent(userId)}`, {
@@ -1712,12 +1709,13 @@ export default function PatientDashboard({ userId, onLogout }) {
                                   opacity: isDisabled ? 0.6 : 1,
                                   color: isSelected ? '#4f46e5' : (isDisabled ? '#94a3b8' : '#000000'), 
                                   fontWeight: isSelected ? '950' : '700', 
-                                  backgroundColor: isSelected ? '#eef2ff' : (isDisabled ? '#f1f5f9' : 'white'), 
-                                  border: isSelected ? '2px solid #4f46e5' : (isDisabled ? '1px solid #e2e8f0' : '1px solid #ffe4e9'),
+                                  backgroundColor: isSelected ? '#eef2ff' : (!slot.available ? '#f1f5f9' : (isDisabled ? '#f8fafc' : 'white')), 
+                                  border: isSelected ? '2px solid #4f46e5' : (!slot.available ? '1px solid #cbd5e1' : (isDisabled ? '1px solid #e2e8f0' : '1px solid #ffe4e9')),
                                   boxShadow: isSelected ? '0 0 15px rgba(79, 70, 229, 0.15)' : 'none',
-                                  cursor: isDisabled ? 'not-allowed' : 'pointer'
+                                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                  filter: !slot.available ? 'grayscale(100%) brightness(0.95)' : 'none'
                                 }}
-                                title={slot.available ? 'Available' : (slot.reason === 'patient-overlap' ? 'Conflicts with your existing appointment' : 'Already booked')}
+                                title={slot.available ? 'Available' : 'Already booked'}
                               >
                                 {formatSlotTime(slot.start)}
                               </MetalButton>
