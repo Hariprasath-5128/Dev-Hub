@@ -8,6 +8,8 @@ import AdminDashboard from './components/AdminDashboard';
 import Simulator from './components/Simulator';
 import TargetedScan from './components/TargetedScan';
 import IntegratedHealthAnalyzer from './components/IntegratedHealthAnalyzer';
+import BlockchainResearch from './components/BlockchainResearch';
+import HealthcarePolicy from './components/HealthcarePolicy';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -99,6 +101,28 @@ export default function App() {
           element={
             user?.role === 'patient' ? (
               <TargetedScan />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/admin/research"
+          element={
+            user?.role === 'admin' ? (
+              <BlockchainResearch />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/admin/policy"
+          element={
+            user?.role === 'admin' ? (
+              <HealthcarePolicy />
             ) : (
               <Navigate to="/" replace />
             )
