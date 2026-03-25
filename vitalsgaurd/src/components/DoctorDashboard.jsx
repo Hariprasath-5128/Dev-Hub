@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import HealthCard from './HealthCard';
 import CriticalOverlay from './CriticalOverlay';
@@ -9,7 +10,128 @@ import { AlertTriangle, Sparkles, UserMinus } from 'lucide-react';
 import { patients as initialPatients } from '../data/mockVitals';
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'http://localhost:5003';
+const AI_API_BASE = 'http://localhost:8000/api';
+
+function ElegantShape({
+  delay = 0,
+  width = 400,
+  height = 100,
+  rotate = 0,
+  gradient = "linear-gradient(135deg, rgba(121,184,255,0.48), rgba(205,232,255,0.34), rgba(255,255,255,0.24))",
+  style,
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -120, rotate: rotate - 12 }}
+      animate={{ opacity: 1, y: 0, rotate }}
+      transition={{
+        duration: 2,
+        delay,
+        ease: [0.23, 0.86, 0.39, 0.96],
+        opacity: { duration: 1.1 },
+      }}
+      style={{ position: "absolute", ...style }}
+    >
+      <motion.div
+        animate={{ y: [0, 16, 0] }}
+        transition={{ duration: 12, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+        style={{ width, height, position: "relative" }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 999,
+            background: gradient,
+            border: "1.5px solid rgba(255,255,255,0.72)",
+            boxShadow: "0 34px 90px rgba(121,184,255,0.3)",
+            backdropFilter: "blur(10px)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 999,
+            background:
+              "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.56), rgba(210,232,255,0.18) 42%, transparent 70%)",
+          }}
+        />
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function CustomModal({ isOpen, onClose, onConfirm, title, message, confirmText = "Confirm", cancelText = "Cancel" }) {
+  if (!isOpen) return null;
+  return (
+    <AnimatePresence>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', background: 'rgba(15, 35, 55, 0.25)', backdropFilter: 'blur(8px)' }}>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          style={{ background: 'white', padding: '2.5rem', borderRadius: '30px', maxWidth: '450px', width: '90%', border: '1px solid rgba(121, 184, 255, 0.3)', boxShadow: '0 30px 60px rgba(15, 45, 88, 0.15)' }}
+        >
+          <div style={{ width: '60px', height: '60px', borderRadius: '20px', background: 'rgba(121, 184, 255, 0.15)', display: 'grid', placeItems: 'center', marginBottom: '1.5rem' }}>
+             <UserMinus size={30} color="#2f77d6" />
+          </div>
+          <h3 style={{ margin: '0 0 0.75rem 0', color: '#173b67', fontSize: '1.5rem', fontWeight: '900' }}>{title}</h3>
+          <p style={{ margin: '0 0 2rem 0', color: '#5f7fa6', fontSize: '1rem', lineHeight: '1.6' }}>{message}</p>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <Button 
+                onClick={onClose} 
+                variant="outline" 
+                style={{ flex: 1, height: '52px', borderRadius: '16px', border: '1px solid #d9e8fb', fontWeight: '800', color: '#5f7fa6' }}
+            >
+              {cancelText}
+            </Button>
+            <Button 
+                onClick={onConfirm} 
+                className="bg-blue-600 hover:bg-blue-700 text-white" 
+                style={{ flex: 1, height: '52px', borderRadius: '16px', fontWeight: '800', boxShadow: '0 12px 24px rgba(37, 99, 235, 0.25)' }}
+            >
+              {confirmText}
+            </Button>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}
+
+function Notification({ message, type = 'success', onClose }) {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 4000);
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 50, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 50, x: '-50%' }}
+            style={{ 
+                position: 'fixed', 
+                bottom: '40px', 
+                left: '50%', 
+                zIndex: 2000, 
+                background: type === 'success' ? '#ecfdf5' : '#fff7ed', 
+                border: `1.5px solid ${type === 'success' ? '#10b981' : '#f59e0b'}`,
+                padding: '1rem 2rem',
+                borderRadius: '16px',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+            }}
+        >
+            <span style={{ fontSize: '1.2rem' }}>{type === 'success' ? '✅' : '⚠️'}</span>
+            <span style={{ color: type === 'success' ? '#065f46' : '#9a3412', fontWeight: '700', fontSize: '0.95rem' }}>{message}</span>
+        </motion.div>
+    );
+}
 
 export default function DoctorDashboard({ onLogout }) {
     const [patientsList, setPatientsList] = useState(initialPatients);
@@ -19,6 +141,8 @@ export default function DoctorDashboard({ onLogout }) {
     const [scanResult, setScanResult] = useState(null);
     const [activeAlerts, setActiveAlerts] = useState({}); // { [patientId]: alertId }
     const [customRequirement, setCustomRequirement] = useState("");
+    const [dischargeModal, setDischargeModal] = useState({ isOpen: false, patientId: null, patientName: "" });
+    const [notification, setNotification] = useState(null);
 
     const activePatient = patientsList.find(p => p.id === activePatientId) || patientsList[0];
 
@@ -60,7 +184,7 @@ export default function DoctorDashboard({ onLogout }) {
 
         const pollInterval = setInterval(async () => {
             try {
-                const res = await axios.get('http://localhost:5003/alerts');
+                const res = await axios.get(`${API_BASE}/alerts`);
                 const serverActiveAlerts = res.data.alerts || [];
                 const serverActiveIds = serverActiveAlerts.map(a => a.id);
                 
@@ -71,9 +195,9 @@ export default function DoctorDashboard({ onLogout }) {
                         if (aId && !serverActiveIds.includes(aId)) {
                             delete next[pId];
                             changed = true;
-                            // Optionally notify specifically for which patient was responded
+                            // Notify specifically for which patient was responded
                             const pName = patientsList.find(p => p.id === pId)?.name || "Patient";
-                            alert(`✅ Emergency Response Confirmed for ${pName}. Admin has acknowledged the alert.`);
+                            setNotification({ message: `✅ Emergency Response Confirmed for ${pName}. Admin has acknowledged the alert.`, type: "success" });
                         }
                     }
                     return changed ? next : prev;
@@ -89,20 +213,31 @@ export default function DoctorDashboard({ onLogout }) {
     function examineVitals(patientId) {
         setActivePatientId(patientId);
         setScanResult(null);
+        // Reset analysis when switching patients to keep UI clean
     }
 
-    function handleDischarge(patientId, e) {
+    function handleDischargeRequest(patientId, e) {
         if (e?.stopPropagation) e.stopPropagation();
-        if (window.confirm("Are you sure you want to discharge this patient? This will remove them from the active monitoring list.")) {
-            setPatientsList(prev => {
-                const newList = prev.filter(p => p.id !== patientId);
-                if (activePatientId === patientId) {
-                    setActivePatientId(newList[0]?.id);
-                }
-                return newList;
-            });
-            setScanResult(null);
-        }
+        const patient = patientsList.find(p => p.id === patientId);
+        setDischargeModal({
+            isOpen: true,
+            patientId,
+            patientName: patient?.name || "this patient"
+        });
+    }
+
+    function confirmDischarge() {
+        const { patientId } = dischargeModal;
+        setPatientsList(prev => {
+            const newList = prev.filter(p => p.id !== patientId);
+            if (activePatientId === patientId) {
+                setActivePatientId(newList[0]?.id);
+            }
+            return newList;
+        });
+        setScanResult(null);
+        setDischargeModal({ isOpen: false, patientId: null, patientName: "" });
+        setNotification({ message: "Patient discharged successfully.", type: "success" });
     }
 
     const latest = activePatient?.vitals[activePatient.vitals.length - 1] || { hr: 0, spo2: 0, temp: 0, bp: 0, status: 'stable' };
@@ -112,7 +247,7 @@ export default function DoctorDashboard({ onLogout }) {
         setAnalyzing(true);
         setScanResult(null);
         try {
-            const res = await axios.post(`${API_BASE}/analyze-vitals`, {
+            const res = await axios.post(`${AI_API_BASE}/analyze-vitals`, {
                 heart_rate: latest.hr,
                 spo2: latest.spo2,
                 temperature: latest.temp,
@@ -122,7 +257,7 @@ export default function DoctorDashboard({ onLogout }) {
             setScanResult(res.data);
         } catch (error) {
             console.error("Backend error:", error);
-            alert("Failed to connect to AI Backend.");
+            setNotification({ message: "Failed to connect to AI Backend.", type: "warning" });
         } finally {
             setAnalyzing(false);
         }
@@ -149,7 +284,7 @@ export default function DoctorDashboard({ onLogout }) {
         }
 
         try {
-            const res = await axios.post('http://localhost:5003/alerts', {
+            const res = await axios.post(`${API_BASE}/alerts`, {
                 doctorName: "Dr. Sarah Chen", 
                 location: `Bed ${activePatient.id.toUpperCase()}`,
                 alertType: alertType,
@@ -162,11 +297,11 @@ export default function DoctorDashboard({ onLogout }) {
             if (res.data.success) {
                 setActiveAlerts(prev => ({ ...prev, [activePatient.id]: res.data.alert.id }));
                 setCustomRequirement(""); // Reset input
-                alert(`🚨 Alert Transmitted for ${activePatient.name}!`);
+                setNotification({ message: `🚨 Alert Transmitted for ${activePatient.name}!`, type: "success" });
             }
         } catch (error) {
             console.error("Failed to send alert:", error);
-            alert("❌ Network Error: Could not connect to Command Center.");
+            setNotification({ message: "❌ Network Error: Could not connect to Command Center.", type: "warning" });
         }
     }
 
@@ -181,20 +316,49 @@ export default function DoctorDashboard({ onLogout }) {
     }
 
     return (
-        <div className={`dashboard ${mode}`} style={{ minHeight: '100vh', maxWidth: 'none', margin: 0, padding: 0, position: 'relative', overflowX: 'hidden', background: 'linear-gradient(135deg, #eef7ff 0%, #e3f1ff 34%, #f3f9ff 62%, #eef7ff 100%)', color: '#173b67' }}>
-            <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 0, pointerEvents: 'none' }}>
+        <div className={`dashboard ${mode}`} style={{ minHeight: '100vh', maxWidth: 'none', margin: 0, padding: 0, position: 'relative', overflowX: 'hidden', background: "linear-gradient(135deg, #cfe5ff 0%, #e7f3ff 34%, #eef7ff 62%, #f9fbff 100%)", color: '#173b67' }}>
+            {/* High-Fidelity Geometry Background Layer */}
+            <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 0, pointerEvents: "none" }}>
                 <div
                     style={{
-                        position: 'absolute',
+                        position: "absolute",
                         inset: 0,
                         background:
-                            'radial-gradient(circle at top left, rgba(121,184,255,0.34), transparent 35%), radial-gradient(circle at left center, rgba(174,216,255,0.28), transparent 42%), radial-gradient(circle at center center, rgba(121,184,255,0.12), transparent 45%), radial-gradient(circle at top right, rgba(174,216,255,0.18), transparent 33%), radial-gradient(circle at bottom left, rgba(121,184,255,0.2), transparent 30%), radial-gradient(circle at bottom right, rgba(214,234,255,0.18), transparent 30%)',
+                            "radial-gradient(circle at top left, rgba(121,184,255,0.56), transparent 34%), radial-gradient(circle at left center, rgba(170,213,255,0.4), transparent 42%), radial-gradient(circle at center center, rgba(166,210,255,0.22), transparent 46%), radial-gradient(circle at top right, rgba(162,207,255,0.22), transparent 34%), radial-gradient(circle at bottom left, rgba(121,184,255,0.24), transparent 32%), radial-gradient(circle at bottom right, rgba(247,167,192,0.2), transparent 26%), radial-gradient(circle at center right, rgba(134,215,195,0.14), transparent 24%)",
                     }}
                 />
-                <div style={{ position: 'absolute', width: 620, height: 132, borderRadius: 999, left: '-6%', top: '14%', background: 'linear-gradient(135deg, rgba(121,184,255,0.38), rgba(205,232,255,0.24), rgba(255,255,255,0.18))', border: '1px solid rgba(255,255,255,0.7)' }} />
-                <div style={{ position: 'absolute', width: 360, height: 88, borderRadius: 999, right: '2%', top: '17%', background: 'linear-gradient(135deg, rgba(109,173,245,0.26), rgba(255,255,255,0.26))', border: '1px solid rgba(255,255,255,0.7)' }} />
-                <div style={{ position: 'absolute', width: 420, height: 104, borderRadius: 999, left: '8%', bottom: '16%', background: 'linear-gradient(135deg, rgba(121,184,255,0.25), rgba(214,234,255,0.22), rgba(255,255,255,0.2))', border: '1px solid rgba(255,255,255,0.65)' }} />
-                <div style={{ position: 'absolute', width: 240, height: 70, borderRadius: 999, right: '12%', bottom: '12%', background: 'linear-gradient(135deg, rgba(255,255,255,0.28), rgba(121,184,255,0.24), rgba(214,234,255,0.18))', border: '1px solid rgba(255,255,255,0.65)' }} />
+                <ElegantShape
+                    delay={0.2}
+                    width={620}
+                    height={138}
+                    rotate={12}
+                    gradient="linear-gradient(135deg, rgba(121,184,255,0.56), rgba(194,226,255,0.38), rgba(255,255,255,0.24))"
+                    style={{ left: "-6%", top: "12%" }}
+                />
+                <ElegantShape
+                    delay={0.35}
+                    width={360}
+                    height={92}
+                    rotate={-18}
+                    gradient="linear-gradient(135deg, rgba(247,167,192,0.36), rgba(255,255,255,0.3))"
+                    style={{ right: "2%", top: "16%" }}
+                />
+                <ElegantShape
+                    delay={0.5}
+                    width={420}
+                    height={108}
+                    rotate={-10}
+                    gradient="linear-gradient(135deg, rgba(134,215,195,0.34), rgba(214,241,255,0.24), rgba(255,255,255,0.24))"
+                    style={{ left: "8%", bottom: "16%" }}
+                />
+                <ElegantShape
+                    delay={0.65}
+                    width={240}
+                    height={70}
+                    rotate={20}
+                    gradient="linear-gradient(135deg, rgba(255,255,255,0.38), rgba(121,184,255,0.38), rgba(195,226,255,0.24))"
+                    style={{ right: "12%", bottom: "12%" }}
+                />
             </div>
 
             <div style={{ position: 'relative', zIndex: 10 }}>
@@ -247,8 +411,8 @@ export default function DoctorDashboard({ onLogout }) {
                                     marginBottom: '0.55rem',
                                     cursor: 'pointer',
                                     transition: 'all 0.2s',
-                                    border: p.id === activePatientId ? '2px solid #ef4444' : '1px solid #d9e8fb',
-                                    backgroundColor: p.id === activePatientId ? '#fff1f2' : '#fff',
+                                    border: p.id === activePatientId ? '2px solid #79b8ff' : '1px solid rgba(121, 184, 255, 0.2)',
+                                    backgroundColor: p.id === activePatientId ? '#eef7ff' : '#fff',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     gap: '0.5rem'
@@ -257,13 +421,13 @@ export default function DoctorDashboard({ onLogout }) {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.95rem' }}>{p.name}</div>
                                     <Button
-                                        onClick={(e) => handleDischarge(p.id, e)}
+                                        onClick={(e) => handleDischargeRequest(p.id, e)}
                                         variant="outline"
                                         size="sm"
-                                        className="text-[8px] h-6 px-2 border-blue-300 text-blue-600 hover:bg-blue-50 whitespace-nowrap"
-                                        style={{ marginLeft: 'auto' }}
+                                        className="text-[8px] h-6 px-2 border-blue-200 bg-blue-50/50 text-blue-600 hover:bg-blue-100 whitespace-nowrap"
+                                        style={{ marginLeft: 'auto', borderRadius: '8px' }}
                                     >
-                                        <UserMinus className="w-2 h-2" />
+                                        <UserMinus className="w-2.5 h-2.5 mr-1" />
                                         Discharge
                                     </Button>
                                 </div>
@@ -291,7 +455,7 @@ export default function DoctorDashboard({ onLogout }) {
                     </ul>
                 </div>
 
-                <div className="patient-summary" style={{ background: 'rgba(255,255,255,0.88)', border: '1px solid rgba(121,184,255,0.24)', backdropFilter: 'blur(10px)', borderRadius: '22px', boxShadow: '0 10px 30px rgba(23,59,103,0.06)', padding: '1.5rem' }}>
+                <div className="patient-summary" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(121,184,255,0.25)', backdropFilter: 'blur(12px)', borderRadius: '30px', boxShadow: '0 15px 35px rgba(15, 45, 88, 0.08)', padding: '2rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                         <div>
                             <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#1e293b' }}>{activePatient.name} <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 'normal' }}>• Real-Time Monitoring</span></h2>
@@ -307,11 +471,11 @@ export default function DoctorDashboard({ onLogout }) {
                                 {analyzing ? 'Scanning Clinical Data...' : 'Run Phidata Agent Scan ✨'}
                             </Button>
                             <Button
-                                onClick={() => handleDischarge(activePatient.id)}
+                                onClick={() => handleDischargeRequest(activePatient.id)}
                                 variant="outline"
-                                className="h-10 px-5 border-blue-300 text-blue-600 hover:bg-blue-50"
+                                className="h-10 px-5 border-blue-200 text-blue-600 hover:bg-blue-50 rounded-xl"
                             >
-                                <UserMinus className="w-4 h-4" />
+                                <UserMinus className="w-4 h-4 mr-2" />
                                 Discharge Patient
                             </Button>
                         </div>
@@ -324,7 +488,7 @@ export default function DoctorDashboard({ onLogout }) {
                         <HealthCard title="Blood Pressure" value={latest.bp} unit="mmHg" severity={latest.status} icon="📊" />
                     </div>
 
-                    <div className="chart-area premium-card" style={{ padding: '1.5rem', marginTop: '1.5rem', background: '#ffffff', border: '1px solid #e8d4e0', borderRadius: '18px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <div className="chart-area premium-card" style={{ padding: '1.5rem', marginTop: '1.5rem', background: '#ffffff', border: '1px solid rgba(121, 184, 255, 0.2)', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                         <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1rem', fontWeight: '700', marginBottom: '1.5rem' }}>📈 Live Vitals Monitor</h4>
                         <ResponsiveContainer width="100%" height={280}>
                             <LineChart data={activePatient.vitals}>
@@ -342,7 +506,7 @@ export default function DoctorDashboard({ onLogout }) {
                     </div>
 
                     {scanResult && (
-                        <div className="ai-debate premium-card" style={{ background: '#fff', border: '1px solid #d9e8fb', borderRadius: '16px', padding: '1.5rem', marginTop: '1.5rem' }}>
+                        <div className="ai-debate premium-card" style={{ background: '#fff', border: '1px solid rgba(121, 184, 255, 0.2)', borderRadius: '24px', padding: '1.5rem', marginTop: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                             <h3 style={{ color: '#2f77d6', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', fontWeight: '800' }}>
                                 <span>⚖️</span> Multi-Agent Clinical Consensus
                             </h3>
@@ -389,13 +553,16 @@ export default function DoctorDashboard({ onLogout }) {
                                     width: '100%',
                                     padding: '0.8rem 1rem',
                                     borderRadius: '10px',
-                                    border: '1.5px solid #d9e8fb',
-                                    marginBottom: '0.5rem',
-                                    fontSize: '14px',
+                                    border: '2px solid rgba(121, 184, 255, 0.3)',
+                                    marginBottom: '0.75rem',
+                                    fontSize: '15px',
                                     outline: 'none',
-                                    transition: 'border-color 0.2s',
-                                    background: activeAlerts[activePatient.id] ? '#f3f7fc' : 'white'
+                                    transition: 'all 0.2s',
+                                    background: activeAlerts[activePatient.id] ? '#f8fafc' : 'rgba(255,255,255,0.9)',
+                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
                                 }}
+                                onFocus={(e) => e.target.style.borderColor = "#79b8ff"}
+                                onBlur={(e) => e.target.style.borderColor = "rgba(121, 184, 255, 0.3)"}
                                 disabled={!!activeAlerts[activePatient.id]}
                             />
                             <ShinyButton
@@ -456,6 +623,25 @@ export default function DoctorDashboard({ onLogout }) {
                     }
                 `}
             </style>
+            {/* Modals & Notifications */}
+            <CustomModal 
+                isOpen={dischargeModal.isOpen}
+                onClose={() => setDischargeModal({ isOpen: false, patientId: null, patientName: "" })}
+                onConfirm={confirmDischarge}
+                title="Discharge Patient?"
+                message={`Are you sure you want to discharge ${dischargeModal.patientName}? This will remove them from the active monitoring list and conclude their current clinical session.`}
+                confirmText="Confirm Discharge"
+            />
+
+            <AnimatePresence>
+                {notification && (
+                    <Notification 
+                        message={notification.message} 
+                        type={notification.type} 
+                        onClose={() => setNotification(null)} 
+                    />
+                )}
+            </AnimatePresence>
         </div>
     );
 }
