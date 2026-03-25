@@ -14,91 +14,91 @@ const API_BASE = 'http://localhost:5003';
 const AI_API_BASE = 'http://localhost:8000/api';
 
 function ElegantShape({
-  delay = 0,
-  width = 400,
-  height = 100,
-  rotate = 0,
-  gradient = "linear-gradient(135deg, rgba(121,184,255,0.48), rgba(205,232,255,0.34), rgba(255,255,255,0.24))",
-  style,
+    delay = 0,
+    width = 400,
+    height = 100,
+    rotate = 0,
+    gradient = "linear-gradient(135deg, rgba(121,184,255,0.48), rgba(205,232,255,0.34), rgba(255,255,255,0.24))",
+    style,
 }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -120, rotate: rotate - 12 }}
-      animate={{ opacity: 1, y: 0, rotate }}
-      transition={{
-        duration: 2,
-        delay,
-        ease: [0.23, 0.86, 0.39, 0.96],
-        opacity: { duration: 1.1 },
-      }}
-      style={{ position: "absolute", ...style }}
-    >
-      <motion.div
-        animate={{ y: [0, 16, 0] }}
-        transition={{ duration: 12, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-        style={{ width, height, position: "relative" }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: 999,
-            background: gradient,
-            border: "1.5px solid rgba(255,255,255,0.72)",
-            boxShadow: "0 34px 90px rgba(121,184,255,0.3)",
-            backdropFilter: "blur(10px)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: 999,
-            background:
-              "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.56), rgba(210,232,255,0.18) 42%, transparent 70%)",
-          }}
-        />
-      </motion.div>
-    </motion.div>
-  );
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: -120, rotate: rotate - 12 }}
+            animate={{ opacity: 1, y: 0, rotate }}
+            transition={{
+                duration: 2,
+                delay,
+                ease: [0.23, 0.86, 0.39, 0.96],
+                opacity: { duration: 1.1 },
+            }}
+            style={{ position: "absolute", ...style }}
+        >
+            <motion.div
+                animate={{ y: [0, 16, 0] }}
+                transition={{ duration: 12, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                style={{ width, height, position: "relative" }}
+            >
+                <div
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        borderRadius: 999,
+                        background: gradient,
+                        border: "1.5px solid rgba(255,255,255,0.72)",
+                        boxShadow: "0 34px 90px rgba(121,184,255,0.3)",
+                        backdropFilter: "blur(10px)",
+                    }}
+                />
+                <div
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        borderRadius: 999,
+                        background:
+                            "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.56), rgba(210,232,255,0.18) 42%, transparent 70%)",
+                    }}
+                />
+            </motion.div>
+        </motion.div>
+    );
 }
 
 function CustomModal({ isOpen, onClose, onConfirm, title, message, confirmText = "Confirm", cancelText = "Cancel" }) {
-  if (!isOpen) return null;
-  return (
-    <AnimatePresence>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', background: 'rgba(15, 35, 55, 0.25)', backdropFilter: 'blur(8px)' }}>
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          style={{ background: 'white', padding: '2.5rem', borderRadius: '30px', maxWidth: '450px', width: '90%', border: '1px solid rgba(121, 184, 255, 0.3)', boxShadow: '0 30px 60px rgba(15, 45, 88, 0.15)' }}
-        >
-          <div style={{ width: '60px', height: '60px', borderRadius: '20px', background: 'rgba(121, 184, 255, 0.15)', display: 'grid', placeItems: 'center', marginBottom: '1.5rem' }}>
-             <UserMinus size={30} color="#2f77d6" />
-          </div>
-          <h3 style={{ margin: '0 0 0.75rem 0', color: '#173b67', fontSize: '1.5rem', fontWeight: '900' }}>{title}</h3>
-          <p style={{ margin: '0 0 2rem 0', color: '#5f7fa6', fontSize: '1rem', lineHeight: '1.6' }}>{message}</p>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <Button 
-                onClick={onClose} 
-                variant="outline" 
-                style={{ flex: 1, height: '52px', borderRadius: '16px', border: '1px solid #d9e8fb', fontWeight: '800', color: '#5f7fa6' }}
-            >
-              {cancelText}
-            </Button>
-            <Button 
-                onClick={onConfirm} 
-                className="bg-blue-600 hover:bg-blue-700 text-white" 
-                style={{ flex: 1, height: '52px', borderRadius: '16px', fontWeight: '800', boxShadow: '0 12px 24px rgba(37, 99, 235, 0.25)' }}
-            >
-              {confirmText}
-            </Button>
-          </div>
-        </motion.div>
-      </div>
-    </AnimatePresence>
-  );
+    if (!isOpen) return null;
+    return (
+        <AnimatePresence>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', background: 'rgba(15, 35, 55, 0.25)', backdropFilter: 'blur(8px)' }}>
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    style={{ background: 'white', padding: '2.5rem', borderRadius: '30px', maxWidth: '450px', width: '90%', border: '1px solid rgba(121, 184, 255, 0.3)', boxShadow: '0 30px 60px rgba(15, 45, 88, 0.15)' }}
+                >
+                    <div style={{ width: '60px', height: '60px', borderRadius: '20px', background: 'rgba(121, 184, 255, 0.15)', display: 'grid', placeItems: 'center', marginBottom: '1.5rem' }}>
+                        <UserMinus size={30} color="#2f77d6" />
+                    </div>
+                    <h3 style={{ margin: '0 0 0.75rem 0', color: '#173b67', fontSize: '1.5rem', fontWeight: '900' }}>{title}</h3>
+                    <p style={{ margin: '0 0 2rem 0', color: '#5f7fa6', fontSize: '1rem', lineHeight: '1.6' }}>{message}</p>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                        <Button
+                            onClick={onClose}
+                            variant="outline"
+                            style={{ flex: 1, height: '52px', borderRadius: '16px', border: '1px solid #d9e8fb', fontWeight: '800', color: '#5f7fa6' }}
+                        >
+                            {cancelText}
+                        </Button>
+                        <Button
+                            onClick={onConfirm}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            style={{ flex: 1, height: '52px', borderRadius: '16px', fontWeight: '800', boxShadow: '0 12px 24px rgba(37, 99, 235, 0.25)' }}
+                        >
+                            {confirmText}
+                        </Button>
+                    </div>
+                </motion.div>
+            </div>
+        </AnimatePresence>
+    );
 }
 
 function Notification({ message, type = 'success', onClose }) {
@@ -112,12 +112,12 @@ function Notification({ message, type = 'success', onClose }) {
             initial={{ opacity: 0, y: 50, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: 50, x: '-50%' }}
-            style={{ 
-                position: 'fixed', 
-                bottom: '40px', 
-                left: '50%', 
-                zIndex: 2000, 
-                background: type === 'success' ? '#ecfdf5' : '#fff7ed', 
+            style={{
+                position: 'fixed',
+                bottom: '40px',
+                left: '50%',
+                zIndex: 2000,
+                background: type === 'success' ? '#ecfdf5' : '#fff7ed',
                 border: `1.5px solid ${type === 'success' ? '#10b981' : '#f59e0b'}`,
                 padding: '1rem 2rem',
                 borderRadius: '16px',
@@ -153,18 +153,18 @@ export default function DoctorDashboard({ onLogout }) {
                 const lastVital = patient.vitals[patient.vitals.length - 1];
                 const now = new Date();
                 const timeStr = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-                
+
                 // Random variation logic
                 const hrVar = (Math.random() * 4 - 2);
                 const spo2Var = (Math.random() * 2 - 1);
                 const tempVar = (Math.random() * 0.2 - 0.1);
                 const bpVar = (Math.random() * 6 - 3);
-                
+
                 const newHr = Math.round(Math.max(60, Math.min(160, lastVital.hr + hrVar)));
                 const newSpo2 = Math.round(Math.max(85, Math.min(100, lastVital.spo2 + spo2Var)));
                 const newTemp = parseFloat(Math.max(36, Math.min(41, lastVital.temp + tempVar)).toFixed(1));
                 const newBp = Math.round(Math.max(90, Math.min(180, lastVital.bp + bpVar)));
-                
+
                 const newStatus = (newHr > 110 || newSpo2 < 92 || newBp > 150) ? 'critical' : (newHr > 95 || newSpo2 < 95 || newBp > 135) ? 'warning' : 'stable';
 
                 const newVitals = [...patient.vitals, { time: timeStr, hr: newHr, spo2: newSpo2, temp: newTemp, bp: newBp, status: newStatus }];
@@ -187,7 +187,7 @@ export default function DoctorDashboard({ onLogout }) {
                 const res = await axios.get(`${API_BASE}/alerts`);
                 const serverActiveAlerts = res.data.alerts || [];
                 const serverActiveIds = serverActiveAlerts.map(a => a.id);
-                
+
                 setActiveAlerts(prev => {
                     const next = { ...prev };
                     let changed = false;
@@ -266,17 +266,17 @@ export default function DoctorDashboard({ onLogout }) {
     async function handleEmergencyAlert() {
         if (!activePatient) return;
         if (activeAlerts[activePatient.id]) return;
-        
+
         const alertType = scanResult?.emergency?.dispatch_alert ? "AI-Triggered Emergency" : "Manual Emergency Override";
         const urgency = scanResult?.emergency?.urgency_note || "CRITICAL";
-        
+
         // Calculate Infrastructure Requirements based on real-time vitals
         const requirements = ["ICU Bed"];
         if (latest.spo2 < 92) requirements.push("High-Flow O2");
         if (latest.spo2 < 88) requirements.push("Ventilator");
         if (latest.hr > 120 || latest.hr < 50) requirements.push("Cardiac Monitor");
         if (latest.temp > 39.5) requirements.push("Cooling Unit");
-        
+
         // Merge with custom doctor requirement
         const finalRequirements = [...requirements];
         if (customRequirement.trim()) {
@@ -285,7 +285,7 @@ export default function DoctorDashboard({ onLogout }) {
 
         try {
             const res = await axios.post(`${API_BASE}/alerts`, {
-                doctorName: "Dr. Sarah Chen", 
+                doctorName: "Dr. Sarah Chen",
                 location: `Bed ${activePatient.id.toUpperCase()}`,
                 alertType: alertType,
                 urgency: urgency.toLowerCase().includes('high') || urgency.toLowerCase().includes('critical') ? 'critical' : 'high',
@@ -293,7 +293,7 @@ export default function DoctorDashboard({ onLogout }) {
                 patientName: activePatient.name,
                 requirements: finalRequirements
             });
-            
+
             if (res.data.success) {
                 setActiveAlerts(prev => ({ ...prev, [activePatient.id]: res.data.alert.id }));
                 setCustomRequirement(""); // Reset input
@@ -389,201 +389,201 @@ export default function DoctorDashboard({ onLogout }) {
                     </div>
                 </div>
 
-            <section className="doctor-top-row" style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 1.5rem 1.5rem' }}>
-                <div className="patient-list premium-card" style={{ background: 'rgba(255,255,255,0.88)', border: '1px solid rgba(121,184,255,0.24)', backdropFilter: 'blur(10px)', borderRadius: '22px', boxShadow: '0 10px 30px rgba(23,59,103,0.06)', height: 'calc(100vh - 170px)', minHeight: 520, display: 'flex', flexDirection: 'column' }}>
-                    <h2 style={{ color: '#2f77d6', marginBottom: '1rem', fontSize: '1.05rem', fontWeight: '800' }}>In-Patient Assignments</h2>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingRight: '6px', paddingBottom: '110px', scrollBehavior: 'smooth', scrollbarGutter: 'stable' }}>
-                        {[...patientsList]
-                            .sort((a, b) => {
-                                const statusPriority = { critical: 0, warning: 1, stable: 2 };
-                                const aStatus = a.vitals[a.vitals.length - 1].status;
-                                const bStatus = b.vitals[b.vitals.length - 1].status;
-                                return statusPriority[aStatus] - statusPriority[bStatus];
-                            })
-                            .map((p) => (
-                                <li 
-                                    key={p.id} 
-                                    className={`patient-item ${p.id === activePatientId ? 'active' : ''}`} 
-                                onClick={() => examineVitals(p.id)}
-                                style={{
-                                    padding: '0.85rem',
-                                    borderRadius: '12px',
-                                    marginBottom: '0.55rem',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                    border: p.id === activePatientId ? '2px solid #79b8ff' : '1px solid rgba(121, 184, 255, 0.2)',
-                                    backgroundColor: p.id === activePatientId ? '#eef7ff' : '#fff',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '0.5rem'
-                                }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.95rem' }}>{p.name}</div>
-                                    <Button
-                                        onClick={(e) => handleDischargeRequest(p.id, e)}
-                                        variant="outline"
-                                        size="sm"
-                                        className="text-[8px] h-6 px-2 border-blue-200 bg-blue-50/50 text-blue-600 hover:bg-blue-100 whitespace-nowrap"
-                                        style={{ marginLeft: 'auto', borderRadius: '8px' }}
-                                    >
-                                        <UserMinus className="w-2.5 h-2.5 mr-1" />
-                                        Discharge
-                                    </Button>
-                                </div>
-                                <small style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
-                                    <span>Age {p.age}</span>
-                                    <span>•</span>
-                                    <span
+                <section className="doctor-top-row" style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 1.5rem 1.5rem' }}>
+                    <div className="patient-list premium-card" style={{ background: 'rgba(255,255,255,0.88)', border: '1px solid rgba(121,184,255,0.24)', backdropFilter: 'blur(10px)', borderRadius: '22px', boxShadow: '0 10px 30px rgba(23,59,103,0.06)', height: 'calc(100vh - 170px)', minHeight: 520, display: 'flex', flexDirection: 'column' }}>
+                        <h2 style={{ color: '#2f77d6', marginBottom: '1rem', fontSize: '1.05rem', fontWeight: '800' }}>In-Patient Assignments</h2>
+                        <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingRight: '6px', paddingBottom: '110px', scrollBehavior: 'smooth', scrollbarGutter: 'stable' }}>
+                            {[...patientsList]
+                                .sort((a, b) => {
+                                    const statusPriority = { critical: 0, warning: 1, stable: 2 };
+                                    const aStatus = a.vitals[a.vitals.length - 1].status;
+                                    const bStatus = b.vitals[b.vitals.length - 1].status;
+                                    return statusPriority[aStatus] - statusPriority[bStatus];
+                                })
+                                .map((p) => (
+                                    <li
+                                        key={p.id}
+                                        className={`patient-item ${p.id === activePatientId ? 'active' : ''}`}
+                                        onClick={() => examineVitals(p.id)}
                                         style={{
-                                            fontSize: '9px',
-                                            textTransform: 'uppercase',
-                                            fontWeight: 800,
-                                            letterSpacing: '0.05em',
-                                            padding: '2px 8px',
-                                            borderRadius: '999px',
-                                            background: p.vitals[p.vitals.length-1].status === 'critical' ? '#fee2e2' : p.vitals[p.vitals.length-1].status === 'warning' ? '#fff7ed' : '#ecfdf5',
-                                            color: p.vitals[p.vitals.length-1].status === 'critical' ? '#b91c1c' : p.vitals[p.vitals.length-1].status === 'warning' ? '#b45309' : '#166534',
+                                            padding: '0.85rem',
+                                            borderRadius: '12px',
+                                            marginBottom: '0.55rem',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s',
+                                            border: p.id === activePatientId ? '2px solid #79b8ff' : '1px solid rgba(121, 184, 255, 0.2)',
+                                            backgroundColor: p.id === activePatientId ? '#eef7ff' : '#fff',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '0.5rem'
                                         }}
                                     >
-                                        {p.vitals[p.vitals.length-1].status}
-                                    </span>
-                                </small>
-                            </li>
-                        ))}
-                        <li aria-hidden="true" style={{ height: '90px', pointerEvents: 'none' }} />
-                    </ul>
-                </div>
-
-                <div className="patient-summary" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(121,184,255,0.25)', backdropFilter: 'blur(12px)', borderRadius: '30px', boxShadow: '0 15px 35px rgba(15, 45, 88, 0.08)', padding: '2rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                        <div>
-                            <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#1e293b' }}>{activePatient.name} <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 'normal' }}>• Real-Time Monitoring</span></h2>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <Button
-                                onClick={runDoctorAnalysis}
-                                disabled={analyzing}
-                                variant="outline"
-                                className="h-10 px-5 border-blue-300 text-blue-600 hover:bg-blue-50"
-                            >
-                                <Sparkles className="w-4 h-4" />
-                                {analyzing ? 'Scanning Clinical Data...' : 'Run Phidata Agent Scan ✨'}
-                            </Button>
-                            <Button
-                                onClick={() => handleDischargeRequest(activePatient.id)}
-                                variant="outline"
-                                className="h-10 px-5 border-blue-200 text-blue-600 hover:bg-blue-50 rounded-xl"
-                            >
-                                <UserMinus className="w-4 h-4 mr-2" />
-                                Discharge Patient
-                            </Button>
-                        </div>
-                    </div>
-
-                    <div className="health-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
-                        <HealthCard title="Heart Rate" value={latest.hr} unit="BPM" severity={latest.status} icon="❤️" />
-                        <HealthCard title="Temperature" value={latest.temp} unit="°C" severity={latest.status} icon="🌡️" />
-                        <HealthCard title="SpO2" value={latest.spo2} unit="%" severity={latest.status} icon="💨" />
-                        <HealthCard title="Blood Pressure" value={latest.bp} unit="mmHg" severity={latest.status} icon="📊" />
-                    </div>
-
-                    <div className="chart-area premium-card" style={{ padding: '1.5rem', marginTop: '1.5rem', background: '#ffffff', border: '1px solid rgba(121, 184, 255, 0.2)', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                        <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1rem', fontWeight: '700', marginBottom: '1.5rem' }}>📈 Live Vitals Monitor</h4>
-                        <ResponsiveContainer width="100%" height={280}>
-                            <LineChart data={activePatient.vitals}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="time" tick={{fontSize: 10}} />
-                                <YAxis tick={{fontSize: 10}} />
-                                <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                                <Legend iconType="circle" />
-                                <Line type="monotone" dataKey="hr" stroke="#ef4444" strokeWidth={2.5} name="Heart Rate (BPM)" dot={false} activeDot={{ r: 6 }} />
-                                <Line type="monotone" dataKey="spo2" stroke="#3b82f6" strokeWidth={2.5} name="SpO2 (%)" dot={false} activeDot={{ r: 6 }} />
-                                <Line type="monotone" dataKey="temp" stroke="#f59e0b" strokeWidth={2.5} name="Temperature (°C)" dot={false} activeDot={{ r: 6 }} />
-                                <Line type="monotone" dataKey="bp" stroke="#10a89a" strokeWidth={2.5} name="BP Systolic (mmHg)" dot={false} activeDot={{ r: 6 }} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    {scanResult && (
-                        <div className="ai-debate premium-card" style={{ background: '#fff', border: '1px solid rgba(121, 184, 255, 0.2)', borderRadius: '24px', padding: '1.5rem', marginTop: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                            <h3 style={{ color: '#2f77d6', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', fontWeight: '800' }}>
-                                <span>⚖️</span> Multi-Agent Clinical Consensus
-                            </h3>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '500px', overflowY: 'auto', paddingRight: '10px' }}>
-                                {[
-                                    { key: 'monitoring', icon: '📈', color: '#0ea5e9', label: 'Monitoring Agent', bg: '#f0f9ff', text: scanResult.debate?.monitoring_view },
-                                    { key: 'diagnosis', icon: '🩺', color: '#db2777', label: 'Diagnosis Agent', bg: '#fdf2f8', text: scanResult.debate?.diagnosis_view },
-                                    { key: 'debate', icon: '⚖️', color: '#1d4ed8', label: 'Debate Coordinator', bg: '#eff6ff', text: `Consensus reached (Disagreement score: ${scanResult.disagreement_score}/10)\n${scanResult.debate?.consensus || scanResult.consensus}` },
-                                    { key: 'explanation', icon: '🗣️', color: '#d97706', label: 'Explanation Agent', bg: '#fffbeb', text: scanResult.explanation?.voice_summary || scanResult.voice_summary },
-                                    { key: 'actions', icon: '⚡', color: '#16a34a', label: 'Action Agent', bg: '#f0fdf4', text: (scanResult.actions || []).map((a, i) => `${i + 1}. ${a}`).join('\n') },
-                                    { key: 'emergency', icon: '🚨', color: '#dc2626', label: 'Emergency Agent', bg: '#fef2f2', text: `Urgency: ${scanResult.emergency?.urgency_note}\nDispatch Alert: ${scanResult.emergency?.dispatch_alert ? 'YES ⚠️' : 'NO ✓'}` },
-                                ].filter(item => item.text).map(item => (
-                                    <div key={item.key} style={{ background: item.bg, padding: '1.25rem', borderRadius: '14px', borderLeft: `5px solid ${item.color}` }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.75rem' }}>
-                                            <span style={{ fontSize: '1.3rem' }}>{item.icon}</span>
-                                            <strong style={{ color: item.color, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                                {item.label}
-                                            </strong>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.95rem' }}>{p.name}</div>
+                                            <Button
+                                                onClick={(e) => handleDischargeRequest(p.id, e)}
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-[8px] h-6 px-2 border-blue-200 bg-blue-50/50 text-blue-600 hover:bg-blue-100 whitespace-nowrap"
+                                                style={{ marginLeft: 'auto', borderRadius: '8px' }}
+                                            >
+                                                <UserMinus className="w-2.5 h-2.5 mr-1" />
+                                                Discharge
+                                            </Button>
                                         </div>
-                                        <p style={{ color: '#334155', margin: 0, fontSize: '0.92rem', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
-                                            {item.text}
-                                        </p>
-                                    </div>
+                                        <small style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
+                                            <span>Age {p.age}</span>
+                                            <span>•</span>
+                                            <span
+                                                style={{
+                                                    fontSize: '9px',
+                                                    textTransform: 'uppercase',
+                                                    fontWeight: 800,
+                                                    letterSpacing: '0.05em',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '999px',
+                                                    background: p.vitals[p.vitals.length - 1].status === 'critical' ? '#fee2e2' : p.vitals[p.vitals.length - 1].status === 'warning' ? '#fff7ed' : '#ecfdf5',
+                                                    color: p.vitals[p.vitals.length - 1].status === 'critical' ? '#b91c1c' : p.vitals[p.vitals.length - 1].status === 'warning' ? '#b45309' : '#166534',
+                                                }}
+                                            >
+                                                {p.vitals[p.vitals.length - 1].status}
+                                            </span>
+                                        </small>
+                                    </li>
                                 ))}
-                            </div>
+                            <li aria-hidden="true" style={{ height: '90px', pointerEvents: 'none' }} />
+                        </ul>
+                    </div>
 
-                            <div style={{ marginTop: '1.5rem', paddingTop: '1.2rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>
-                                <span>Disagreement: <strong style={{ color: '#1d4ed8' }}>{scanResult.disagreement_score}/10</strong></span>
-                                <span>Clinical EWS: <strong style={{ color: scanResult.ews?.colour || '#16a34a' }}>{scanResult.ews?.level?.toUpperCase()}</strong></span>
-                                <span>Emergency Dispatch: <strong style={{ color: scanResult.emergency?.dispatch_alert ? '#dc2626' : '#16a34a' }}>{scanResult.emergency?.dispatch_alert ? 'YES' : 'NO'}</strong></span>
+                    <div className="patient-summary" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(121,184,255,0.25)', backdropFilter: 'blur(12px)', borderRadius: '30px', boxShadow: '0 15px 35px rgba(15, 45, 88, 0.08)', padding: '2rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                            <div>
+                                <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#1e293b' }}>{activePatient.name} <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 'normal' }}>• Real-Time Monitoring</span></h2>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <Button
+                                    onClick={runDoctorAnalysis}
+                                    disabled={analyzing}
+                                    variant="outline"
+                                    className="h-10 px-5 border-blue-300 text-blue-600 hover:bg-blue-50"
+                                >
+                                    <Sparkles className="w-4 h-4" />
+                                    {analyzing ? 'Scanning Clinical Data...' : 'Run Phidata Agent Scan ✨'}
+                                </Button>
+                                <Button
+                                    onClick={() => handleDischargeRequest(activePatient.id)}
+                                    variant="outline"
+                                    className="h-10 px-5 border-blue-200 text-blue-600 hover:bg-blue-50 rounded-xl"
+                                >
+                                    <UserMinus className="w-4 h-4 mr-2" />
+                                    Discharge Patient
+                                </Button>
                             </div>
                         </div>
-                    )}
 
-                    <div className="action-row" style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
-                        <div style={{ position: 'relative', flex: 1 }}>
-                            <input 
-                                type="text"
-                                placeholder="Specify Clinical Needs (e.g. Cardiologist, Blood)..."
-                                value={customRequirement}
-                                onChange={(e) => setCustomRequirement(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.8rem 1rem',
-                                    borderRadius: '10px',
-                                    border: '2px solid rgba(121, 184, 255, 0.3)',
-                                    marginBottom: '0.75rem',
-                                    fontSize: '15px',
-                                    outline: 'none',
-                                    transition: 'all 0.2s',
-                                    background: activeAlerts[activePatient.id] ? '#f8fafc' : 'rgba(255,255,255,0.9)',
-                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
-                                }}
-                                onFocus={(e) => e.target.style.borderColor = "#79b8ff"}
-                                onBlur={(e) => e.target.style.borderColor = "rgba(121, 184, 255, 0.3)"}
-                                disabled={!!activeAlerts[activePatient.id]}
-                            />
-                            <ShinyButton
-                                onClick={handleEmergencyAlert}
-                                disabled={!!activeAlerts[activePatient.id]}
-                                variant={activeAlerts[activePatient.id] ? 'white' : 'pink'}
-                                icon={<AlertTriangle className="w-4 h-4" />}
-                                className="w-full h-11 text-[11px] uppercase tracking-[0.08em]"
-                            >
-                                {activeAlerts[activePatient.id] ? (
-                                    <>
-                                        <span style={{ animation: 'pulse 1.5s infinite' }}>⏳</span>
-                                        ADMIN RESPONSE PENDING...
-                                    </>
-                                ) : (
-                                    <>🚨 Trigger Clinical Dispatch</>
-                                )}
-                            </ShinyButton>
+                        <div className="health-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                            <HealthCard title="Heart Rate" value={latest.hr} unit="BPM" severity={latest.status} icon="❤️" />
+                            <HealthCard title="Temperature" value={latest.temp} unit="°C" severity={latest.status} icon="🌡️" />
+                            <HealthCard title="SpO2" value={latest.spo2} unit="%" severity={latest.status} icon="💨" />
+                            <HealthCard title="Blood Pressure" value={latest.bp} unit="mmHg" severity={latest.status} icon="📊" />
+                        </div>
+
+                        <div className="chart-area premium-card" style={{ padding: '1.5rem', marginTop: '1.5rem', background: '#ffffff', border: '1px solid rgba(121, 184, 255, 0.2)', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                            <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1rem', fontWeight: '700', marginBottom: '1.5rem' }}>📈 Live Vitals Monitor</h4>
+                            <ResponsiveContainer width="100%" height={280}>
+                                <LineChart data={activePatient.vitals}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                                    <YAxis tick={{ fontSize: 10 }} />
+                                    <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                                    <Legend iconType="circle" />
+                                    <Line type="monotone" dataKey="hr" stroke="#ef4444" strokeWidth={2.5} name="Heart Rate (BPM)" dot={false} activeDot={{ r: 6 }} />
+                                    <Line type="monotone" dataKey="spo2" stroke="#3b82f6" strokeWidth={2.5} name="SpO2 (%)" dot={false} activeDot={{ r: 6 }} />
+                                    <Line type="monotone" dataKey="temp" stroke="#f59e0b" strokeWidth={2.5} name="Temperature (°C)" dot={false} activeDot={{ r: 6 }} />
+                                    <Line type="monotone" dataKey="bp" stroke="#10a89a" strokeWidth={2.5} name="BP Systolic (mmHg)" dot={false} activeDot={{ r: 6 }} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {scanResult && (
+                            <div className="ai-debate premium-card" style={{ background: '#fff', border: '1px solid rgba(121, 184, 255, 0.2)', borderRadius: '24px', padding: '1.5rem', marginTop: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                                <h3 style={{ color: '#2f77d6', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', fontWeight: '800' }}>
+                                    <span>⚖️</span> Multi-Agent Clinical Consensus
+                                </h3>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '500px', overflowY: 'auto', paddingRight: '10px' }}>
+                                    {[
+                                        { key: 'monitoring', icon: '📈', color: '#0ea5e9', label: 'Monitoring Agent', bg: '#f0f9ff', text: scanResult.debate?.monitoring_view },
+                                        { key: 'diagnosis', icon: '🩺', color: '#db2777', label: 'Diagnosis Agent', bg: '#fdf2f8', text: scanResult.debate?.diagnosis_view },
+                                        { key: 'debate', icon: '⚖️', color: '#1d4ed8', label: 'Debate Coordinator', bg: '#eff6ff', text: `Consensus reached (Disagreement score: ${scanResult.disagreement_score}/10)\n${scanResult.debate?.consensus || scanResult.consensus}` },
+                                        { key: 'explanation', icon: '🗣️', color: '#d97706', label: 'Explanation Agent', bg: '#fffbeb', text: scanResult.explanation?.voice_summary || scanResult.voice_summary },
+                                        { key: 'actions', icon: '⚡', color: '#16a34a', label: 'Action Agent', bg: '#f0fdf4', text: (scanResult.actions || []).map((a, i) => `${i + 1}. ${a}`).join('\n') },
+                                        { key: 'emergency', icon: '🚨', color: '#dc2626', label: 'Emergency Agent', bg: '#fef2f2', text: `Urgency: ${scanResult.emergency?.urgency_note}\nDispatch Alert: ${scanResult.emergency?.dispatch_alert ? 'YES ⚠️' : 'NO ✓'}` },
+                                    ].filter(item => item.text).map(item => (
+                                        <div key={item.key} style={{ background: item.bg, padding: '1.25rem', borderRadius: '14px', borderLeft: `5px solid ${item.color}` }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.75rem' }}>
+                                                <span style={{ fontSize: '1.3rem' }}>{item.icon}</span>
+                                                <strong style={{ color: item.color, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                    {item.label}
+                                                </strong>
+                                            </div>
+                                            <p style={{ color: '#334155', margin: 0, fontSize: '0.92rem', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+                                                {item.text}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div style={{ marginTop: '1.5rem', paddingTop: '1.2rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>
+                                    <span>Disagreement: <strong style={{ color: '#1d4ed8' }}>{scanResult.disagreement_score}/10</strong></span>
+                                    <span>Clinical EWS: <strong style={{ color: scanResult.ews?.colour || '#16a34a' }}>{scanResult.ews?.level?.toUpperCase()}</strong></span>
+                                    <span>Emergency Dispatch: <strong style={{ color: scanResult.emergency?.dispatch_alert ? '#dc2626' : '#16a34a' }}>{scanResult.emergency?.dispatch_alert ? 'YES' : 'NO'}</strong></span>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="action-row" style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
+                            <div style={{ position: 'relative', flex: 1 }}>
+                                <input
+                                    type="text"
+                                    placeholder="Specify Clinical Needs (e.g. Cardiologist, Blood)..."
+                                    value={customRequirement}
+                                    onChange={(e) => setCustomRequirement(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.8rem 1rem',
+                                        borderRadius: '10px',
+                                        border: '2px solid rgba(121, 184, 255, 0.3)',
+                                        marginBottom: '0.75rem',
+                                        fontSize: '15px',
+                                        outline: 'none',
+                                        transition: 'all 0.2s',
+                                        background: activeAlerts[activePatient.id] ? '#f8fafc' : 'rgba(255,255,255,0.9)',
+                                        boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                                    }}
+                                    onFocus={(e) => e.target.style.borderColor = "#79b8ff"}
+                                    onBlur={(e) => e.target.style.borderColor = "rgba(121, 184, 255, 0.3)"}
+                                    disabled={!!activeAlerts[activePatient.id]}
+                                />
+                                <ShinyButton
+                                    onClick={handleEmergencyAlert}
+                                    disabled={!!activeAlerts[activePatient.id]}
+                                    variant={activeAlerts[activePatient.id] ? 'white' : 'pink'}
+                                    icon={<AlertTriangle className="w-4 h-4" />}
+                                    className={`w-full h-11 text-[11px] uppercase tracking-[0.08em] ${activeAlerts[activePatient.id] ? '' : 'text-red-600 hover:text-red-600'}`}
+                                >
+                                    {activeAlerts[activePatient.id] ? (
+                                        <>
+                                            <span style={{ animation: 'pulse 1.5s infinite' }}>⏳</span>
+                                            ADMIN RESPONSE PENDING...
+                                        </>
+                                    ) : (
+                                        <>🚨 Trigger Clinical Dispatch</>
+                                    )}
+                                </ShinyButton>
+                            </div>
                         </div>
                     </div>
-                </div>
                 </section>
 
                 <Footer
@@ -619,12 +619,12 @@ export default function DoctorDashboard({ onLogout }) {
                     }
 
                     .patient-list ul::-webkit-scrollbar-thumb:hover {
-                        background: rgba(47,119,214,0.55);
+                        background: rgba(47,119,214,0.54);
                     }
                 `}
             </style>
             {/* Modals & Notifications */}
-            <CustomModal 
+            <CustomModal
                 isOpen={dischargeModal.isOpen}
                 onClose={() => setDischargeModal({ isOpen: false, patientId: null, patientName: "" })}
                 onConfirm={confirmDischarge}
@@ -635,10 +635,10 @@ export default function DoctorDashboard({ onLogout }) {
 
             <AnimatePresence>
                 {notification && (
-                    <Notification 
-                        message={notification.message} 
-                        type={notification.type} 
-                        onClose={() => setNotification(null)} 
+                    <Notification
+                        message={notification.message}
+                        type={notification.type}
+                        onClose={() => setNotification(null)}
                     />
                 )}
             </AnimatePresence>
