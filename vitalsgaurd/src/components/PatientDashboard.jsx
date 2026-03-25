@@ -213,30 +213,32 @@ export default function PatientDashboard({ userId, onLogout }) {
   const calculateLinearRisk = (v) => {
     if (!v) return 0;
 
-    // Baselines from user reference
-    const n = { hr: 75, spo2: 96, temp: 37, sys: 120 };
-    const s = { hr: 150, spo2: 75, temp: 42, sys: 165 };
+    // Clinical Baselines (Normal vs Severe)
+    const n = { hr: 70, spo2: 98, temp: 37, sys: 120 }; 
+    const s = { hr: 130, spo2: 85, temp: 40, sys: 160 };
 
-    // Linear Progress (User's logic)
+    // Calculate Progress for each vital (0 to 1+)
     const hrP = Math.max(0, (v.hr - n.hr) / (s.hr - n.hr));
     const spo2P = Math.max(0, (n.spo2 - v.spo2) / (n.spo2 - s.spo2));
     const tempP = Math.max(0, (v.temp - n.temp) / (s.temp - n.temp));
     const sysP = Math.max(0, ((v.bp_systolic || 120) - n.sys) / (s.sys - n.sys));
 
-    // Weights from user reference
-    const weights = { hr: 0.15, spo2: 0.30, temp: 0.40, sys: 0.15 };
-
-    // Weighted raw progress
-    const weightedProgress = (hrP * weights.hr) + (spo2P * weights.spo2) + (tempP * weights.temp) + (sysP * weights.sys);
-
-    // Intensity curve (power of 1.5 stays lower for slight spikes, accelerates as it nears limit)
-    const intensity = Math.pow(Math.min(1.0, weightedProgress), 1.5);
-    const score = Math.min(100, Math.round(intensity * 100));
-
+    // Increase weights for life-critical indicators (SpO2 and Temp)
+    const weights = { hr: 0.20, spo2: 0.45, temp: 0.25, sys: 0.10 };
+    
+    // Raw weighted progress
+    const rawProgress = (hrP * weights.hr) + (spo2P * weights.spo2) + (tempP * weights.temp) + (sysP * weights.sys);
+    
+    // Use an aggressive scaling to ensure severe values reach 90-100% quickly
+    const score = Math.round(rawProgress * 100);
+    
+    // Safety check: If SpO2 is below 88%, it's an automatic high risk regardless of others
+    const finalScore = v.spo2 < 88 ? Math.max(score, 85 + (88 - v.spo2) * 2) : score;
+    
     // Subtle floor for visibility
-    if (score === 0 && (hrP > 0.05 || spo2P > 0.05 || tempP > 0.05 || sysP > 0.05)) return 3;
-
-    return score;
+    if (finalScore === 0 && (hrP > 0.05 || spo2P > 0.05 || tempP > 0.05 || sysP > 0.05)) return 3;
+    
+    return Math.min(100, Math.max(0, finalScore));
   };
 
   // ++++++++++++++++++++ LOCAL SIMULATION EFFECT ++++++++++++++++++++
@@ -274,28 +276,8 @@ export default function PatientDashboard({ userId, onLogout }) {
         setCurrentHr(nextHr); setCurrentSpo2(nextSpo2); setCurrentTemp(nextTemp); setCurrentBpSystolic(nextSys); setCurrentBpDiastolic(nextDia);
         const newHistory = [...prev]; if (newHistory.length > 50) newHistory.shift();
 
-        // Trend-Based Range Mapping & Damping (Strictly following Trend-to-Risk Mapping)
-        setSeverityScore(prevScore => {
-          const trendStr = (trendResult?.trend || 'Stable').toLowerCase();
-          let target = prevScore;
-
-          if (trendStr === 'improving') {
-            // Range 40 to 70
-            target = 40 + (Math.random() * 30);
-          } else if (trendStr.includes('deteriorat') || trendStr.includes('worsening')) {
-            // Range 80 to 100
-            target = 80 + (Math.random() * 20);
-          } else {
-            // Default: Stable (Range 0 to 30)
-            target = Math.random() * 30;
-          }
-
-          const diff = target - prevScore;
-          // Faster damping to satisfy "sudden increase or decrease" concerns but feel smooth
-          const maxStep = 20;
-          if (Math.abs(diff) <= maxStep) return Math.round(target);
-          return Math.round(prevScore + (diff > 0 ? maxStep : -maxStep));
-        });
+        // Update Severity Score using real-time Linear Risk Calculation
+        setSeverityScore(calculateLinearRisk(newReading));
 
         return [...newHistory, newReading];
       });
@@ -378,7 +360,7 @@ export default function PatientDashboard({ userId, onLogout }) {
 
           const maxProb = Math.max(...Object.values(allProbabilities));
           const currentScore = Math.round(maxProb * 100);
-          setSeverityScore(currentScore);
+          // PREVENT CONFLICT: severityScore is now exclusively driven by calculateLinearRisk in the 1500ms loop.
 
           // Prefer dedicated trajectory endpoint; fallback to EWS-based synthetic trajectory.
           try {
@@ -733,18 +715,20 @@ export default function PatientDashboard({ userId, onLogout }) {
       <main style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
         {/* ==================== MAIN DASHBOARD ==================== */}
         {activeTab === 'dashboard' ? (
-          <M1
-            healthMetrics={healthMetrics}
-            dataGenerationMode={dataGenerationMode}
-            setDataGenerationMode={setDataGenerationMode}
-            setSpikeStartTime={setSpikeStartTime}
-            vitalsHistory={vitalsHistory}
-            severityScore={severityScore}
-            trendResult={trendResult}
-            trendExplanation={trendExplanation}
-            explaining={explaining}
-            doctors={doctors}
-          />
+          <>
+            <M1
+              healthMetrics={healthMetrics}
+              dataGenerationMode={dataGenerationMode}
+              setDataGenerationMode={setDataGenerationMode}
+              setSpikeStartTime={setSpikeStartTime}
+              vitalsHistory={vitalsHistory}
+              severityScore={severityScore}
+              trendResult={trendResult}
+              trendExplanation={trendExplanation}
+              explaining={explaining}
+              doctors={doctors}
+            />
+          </>
         ) : activeTab === 'interactive analyzer' ? (
           <>
             {/* ==================== INTERACTIVE ANALYZER ==================== */}
