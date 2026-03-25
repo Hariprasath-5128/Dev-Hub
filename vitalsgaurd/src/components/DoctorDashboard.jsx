@@ -13,6 +13,8 @@ export default function DoctorDashboard({ onLogout }) {
     const [mode, setMode] = useState('normal');
     const [analyzing, setAnalyzing] = useState(false);
     const [scanResult, setScanResult] = useState(null);
+    const [activeAlerts, setActiveAlerts] = useState({}); // { [patientId]: alertId }
+    const [customRequirement, setCustomRequirement] = useState("");
 
     const activePatient = patientsList.find(p => p.id === activePatientId) || patientsList[0];
 
@@ -46,6 +48,39 @@ export default function DoctorDashboard({ onLogout }) {
 
         return () => clearInterval(interval);
     }, []);
+
+    // Polling for Alert Resolution (check if our active alerts are still on the server)
+    useEffect(() => {
+        const activeIds = Object.values(activeAlerts).filter(id => !!id);
+        if (activeIds.length === 0) return;
+
+        const pollInterval = setInterval(async () => {
+            try {
+                const res = await axios.get('http://localhost:5003/alerts');
+                const serverActiveAlerts = res.data.alerts || [];
+                const serverActiveIds = serverActiveAlerts.map(a => a.id);
+                
+                setActiveAlerts(prev => {
+                    const next = { ...prev };
+                    let changed = false;
+                    for (const [pId, aId] of Object.entries(next)) {
+                        if (aId && !serverActiveIds.includes(aId)) {
+                            delete next[pId];
+                            changed = true;
+                            // Optionally notify specifically for which patient was responded
+                            const pName = patientsList.find(p => p.id === pId)?.name || "Patient";
+                            alert(`✅ Emergency Response Confirmed for ${pName}. Admin has acknowledged the alert.`);
+                        }
+                    }
+                    return changed ? next : prev;
+                });
+            } catch (error) {
+                console.error("Alert polling failed:", error);
+            }
+        }, 3000);
+
+        return () => clearInterval(pollInterval);
+    }, [activeAlerts, patientsList]);
 
     function examineVitals(patientId) {
         setActivePatientId(patientId);
@@ -90,10 +125,44 @@ export default function DoctorDashboard({ onLogout }) {
     }
 
     async function handleEmergencyAlert() {
-        if (scanResult?.emergency?.dispatch_alert) {
-            alert(`Auto-Emergency alert triggered! Reason: ${scanResult.emergency.urgency_note}`);
-        } else {
-            alert('Emergency alert sent manually.');
+        if (!activePatient) return;
+        if (activeAlerts[activePatient.id]) return;
+        
+        const alertType = scanResult?.emergency?.dispatch_alert ? "AI-Triggered Emergency" : "Manual Emergency Override";
+        const urgency = scanResult?.emergency?.urgency_note || "CRITICAL";
+        
+        // Calculate Infrastructure Requirements based on real-time vitals
+        const requirements = ["ICU Bed"];
+        if (latest.spo2 < 92) requirements.push("High-Flow O2");
+        if (latest.spo2 < 88) requirements.push("Ventilator");
+        if (latest.hr > 120 || latest.hr < 50) requirements.push("Cardiac Monitor");
+        if (latest.temp > 39.5) requirements.push("Cooling Unit");
+        
+        // Merge with custom doctor requirement
+        const finalRequirements = [...requirements];
+        if (customRequirement.trim()) {
+            finalRequirements.push(`Doc Note: ${customRequirement.trim()}`);
+        }
+
+        try {
+            const res = await axios.post('http://localhost:5003/alerts', {
+                doctorName: "Dr. Sarah Chen", 
+                location: `Bed ${activePatient.id.toUpperCase()}`,
+                alertType: alertType,
+                urgency: urgency.toLowerCase().includes('high') || urgency.toLowerCase().includes('critical') ? 'critical' : 'high',
+                patientId: activePatientId,
+                patientName: activePatient.name,
+                requirements: finalRequirements
+            });
+            
+            if (res.data.success) {
+                setActiveAlerts(prev => ({ ...prev, [activePatient.id]: res.data.alert.id }));
+                setCustomRequirement(""); // Reset input
+                alert(`🚨 Alert Transmitted for ${activePatient.name}!`);
+            }
+        } catch (error) {
+            console.error("Failed to send alert:", error);
+            alert("❌ Network Error: Could not connect to Command Center.");
         }
     }
 
@@ -109,32 +178,29 @@ export default function DoctorDashboard({ onLogout }) {
 
     return (
         <div className={`dashboard ${mode}`}>
-            <CriticalOverlay
-                active={mode === 'critical'}
-                message="Patient critical parameter detected. Auto alert ready for emergency contact."
-                onResolve={() => setMode('normal')}
-            />
             <header className="premium-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <div style={{ fontSize: '24px' }}>🏥</div>
                     <h1 style={{ margin: 0, color: '#7C3AED', fontSize: '1.5rem', fontWeight: 'bold' }}>Doctor Command Center</h1>
                 </div>
-                <div className="header-actions">
-                    <button className="nav-pill" onClick={() => setMode((v) => (v === 'normal' ? 'critical' : 'normal'))}>
-                        {mode === 'normal' ? '🚨 Switch to Critical' : '✓ Normal Mode'}
-                    </button>
                     <button className="nav-pill logout" onClick={onLogout}>Logout</button>
-                </div>
             </header>
 
             <section className="doctor-top-row">
                 <div className="patient-list premium-card">
                     <h2 style={{ color: '#7C3AED', marginBottom: '1.5rem', fontSize: '1.1rem', fontWeight: '800' }}>In-Patient Assignments</h2>
                     <ul style={{ listStyle: 'none', padding: 0 }}>
-                        {patientsList.map((p) => (
-                            <li 
-                                key={p.id} 
-                                className={`patient-item ${p.id === activePatientId ? 'active' : ''}`} 
+                        {[...patientsList]
+                            .sort((a, b) => {
+                                const statusPriority = { critical: 0, warning: 1, stable: 2 };
+                                const aStatus = a.vitals[a.vitals.length - 1].status;
+                                const bStatus = b.vitals[b.vitals.length - 1].status;
+                                return statusPriority[aStatus] - statusPriority[bStatus];
+                            })
+                            .map((p) => (
+                                <li 
+                                    key={p.id} 
+                                    className={`patient-item ${p.id === activePatientId ? 'active' : ''}`} 
                                 onClick={() => examineVitals(p.id)}
                                 style={{
                                     padding: '1rem',
@@ -250,24 +316,56 @@ export default function DoctorDashboard({ onLogout }) {
                     )}
 
                     <div className="action-row" style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
-                        <button 
-                            className="premium-btn emergency" 
-                            onClick={handleEmergencyAlert}
-                            style={{ 
-                                flex: 1, 
-                                padding: '1rem', 
-                                background: '#dc2626', 
-                                color: 'white', 
-                                border: 'none', 
-                                borderRadius: '10px', 
-                                fontWeight: '800', 
-                                cursor: 'pointer',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1px'
-                            }}
-                        >
-                            🚨 Manual Emergency Override
-                        </button>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                            <input 
+                                type="text"
+                                placeholder="Specify Clinical Needs (e.g. Cardiologist, Blood)..."
+                                value={customRequirement}
+                                onChange={(e) => setCustomRequirement(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.8rem 1rem',
+                                    borderRadius: '10px',
+                                    border: '1.5px solid #e2e8f0',
+                                    marginBottom: '0.5rem',
+                                    fontSize: '14px',
+                                    outline: 'none',
+                                    transition: 'border-color 0.2s',
+                                    background: activeAlerts[activePatient.id] ? '#f8fafc' : 'white'
+                                }}
+                                disabled={!!activeAlerts[activePatient.id]}
+                            />
+                            <button 
+                                className="premium-btn emergency" 
+                                onClick={handleEmergencyAlert}
+                                disabled={!!activeAlerts[activePatient.id]}
+                                style={{ 
+                                    width: '100%', 
+                                    padding: '1rem', 
+                                    background: activeAlerts[activePatient.id] ? '#475569' : '#dc2626', 
+                                    color: 'white', 
+                                    border: 'none', 
+                                    borderRadius: '10px', 
+                                    fontWeight: '800', 
+                                    cursor: activeAlerts[activePatient.id] ? 'not-allowed' : 'pointer',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '10px'
+                                }}
+                            >
+                                {activeAlerts[activePatient.id] ? (
+                                    <>
+                                        <span style={{ animation: 'pulse 1.5s infinite' }}>⏳</span>
+                                        ADMIN RESPONSE PENDING...
+                                    </>
+                                ) : (
+                                    <>🚨 Trigger Clinical Dispatch</>
+                                )}
+                            </button>
+                        </div>
                         <button 
                             onClick={(e) => handleDischarge(activePatient.id, e)}
                             style={{ 
@@ -285,6 +383,15 @@ export default function DoctorDashboard({ onLogout }) {
                     </div>
                 </div>
             </section>
+            <style>
+                {`
+                    @keyframes pulse {
+                        0% { opacity: 1; transform: scale(1); }
+                        50% { opacity: 0.7; transform: scale(0.95); }
+                        100% { opacity: 1; transform: scale(1); }
+                    }
+                `}
+            </style>
         </div>
     );
 }

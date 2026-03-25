@@ -133,11 +133,7 @@ export default function AdminDashboard({ onLogout }) {
     medAir: 46
   });
 
-  const [emergencyCalls, setEmergencyCalls] = useState([
-    { id: 1, doctor: 'Dr. Sarah Chen', location: 'ICU Ward B', alert: 'Code Blue', time: '10:42 AM', urgency: 'critical' },
-    { id: 2, doctor: 'Dr. Rajesh Kumar', location: 'Emergency Bay 4', alert: 'Trauma Alpha', time: '10:45 AM', urgency: 'critical' },
-    { id: 3, doctor: 'Dr. Vishal Aishu', location: 'Operating Room 2', alert: 'Instrument Failure', time: '10:50 AM', urgency: 'high' },
-  ]);
+  const [emergencyCalls, setEmergencyCalls] = useState([]);
   const [acknowledgingIds, setAcknowledgingIds] = useState([]);
 
   useEffect(() => {
@@ -153,6 +149,52 @@ export default function AdminDashboard({ onLogout }) {
     }, 3000);
     return () => clearInterval(timer);
   }, []);
+
+  // Fetch Emergency Alerts from Node Backend
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await fetch('http://localhost:5003/alerts');
+        const data = await res.json();
+        if (data.success) {
+          setEmergencyCalls(data.alerts);
+        }
+      } catch (err) {
+        console.error("Failed to fetch alerts:", err);
+      }
+    };
+
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 3000); // Poll every 3 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleRespondToAlert = async (alertId) => {
+    // Optimistic UI update for the "ACK" state
+    setAcknowledgingIds(prev => [...prev, alertId]);
+    
+    try {
+      const res = await fetch(`http://localhost:5003/alerts/${alertId}/respond`, {
+        method: 'PATCH'
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        // Wait a bit to show the "ACK" state before removing
+        setTimeout(() => {
+          setEmergencyCalls(prev => prev.filter(c => c.id !== alertId));
+          setAcknowledgingIds(prev => prev.filter(id => id !== alertId));
+        }, 1200);
+      } else {
+        setAcknowledgingIds(prev => prev.filter(id => id !== alertId));
+        alert("Failed to respond to alert.");
+      }
+    } catch (err) {
+      console.error("Respond error:", err);
+      setAcknowledgingIds(prev => prev.filter(id => id !== alertId));
+      alert("Network error while responding.");
+    }
+  };
 
   const counts = patients.reduce(
     (acc, patient) => {
@@ -397,10 +439,21 @@ export default function AdminDashboard({ onLogout }) {
                       >
                         <div className="flex items-center gap-3">
                           <div className="min-w-0">
-                            <div className="font-extrabold text-[#1e293b] text-base leading-tight truncate">{call.doctor}</div>
+                            <div className="font-extrabold text-[#1e293b] text-base leading-tight truncate">
+                              {call.doctor} <span style={{ fontWeight: 'normal', color: '#64748b', fontSize: '0.8rem' }}>for</span> {call.patientName}
+                            </div>
                             <div className="text-xs text-slate-500 font-medium my-0.5">
                               {call.location} • <span style={{ color: call.urgency === 'critical' ? '#ef4444' : '#f59e0b', fontWeight: '800' }}>{call.alert}</span>
                             </div>
+                            {call.requirements && call.requirements.length > 0 && (
+                              <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap' }}>
+                                {call.requirements.map((req, rIdx) => (
+                                  <span key={rIdx} style={{ fontSize: '10px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#475569', border: '1px solid #e2e8f0' }}>
+                                    🛠️ {req}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -409,13 +462,7 @@ export default function AdminDashboard({ onLogout }) {
                             variant={acknowledgingIds.includes(call.id) ? 'blue' : 'green'}
                             className="scale-90 h-8 px-3 text-[10px]"
                             icon={acknowledgingIds.includes(call.id) ? undefined : <Activity className="w-3 h-3" />}
-                            onClick={() => {
-                              setAcknowledgingIds(prev => [...prev, call.id]);
-                              setTimeout(() => {
-                                setEmergencyCalls(prev => prev.filter(c => c.id !== call.id));
-                                setAcknowledgingIds(prev => prev.filter(id => id !== call.id));
-                              }, 1200); 
-                            }}
+                            onClick={() => handleRespondToAlert(call.id)}
                             disabled={acknowledgingIds.includes(call.id)}
                           >
                             {acknowledgingIds.includes(call.id) ? 'ACK' : 'RESPOND'}
@@ -430,6 +477,21 @@ export default function AdminDashboard({ onLogout }) {
                   variant="blue"
                   className="w-full mt-6 h-10 text-xs"
                   icon={<Plus className="w-3 h-3" />}
+                  onClick={async () => {
+                    // Simulation button to create a new alert via API
+                    try {
+                      await fetch('http://localhost:5003/alerts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          doctorName: "SIMULATOR",
+                          location: "Test Range",
+                          alertType: "Simulation Call",
+                          urgency: "high"
+                        })
+                      });
+                    } catch (e) { console.error(e); }
+                  }}
                 >
                   SIMULATED CALL
                 </ShinyButton>

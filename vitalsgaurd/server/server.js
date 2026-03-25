@@ -22,6 +22,7 @@ const doctorsCatalog = [
 
 // In-memory store; replace with DB table when schema is finalized.
 const appointmentsStore = [];
+const alertsStore = []; // In-memory emergency alert store
 
 function isSameDate(isoDateTime, dateStr) {
   return (isoDateTime || '').slice(0, 10) === dateStr;
@@ -322,6 +323,59 @@ app.post('/appointments/book', async (req, res) => {
 
   appointmentsStore.push(appointment);
   return res.json({ success: true, appointment });
+});
+
+// ═══════════════════════════════════════════════════
+//  EMERGENCY ALERTS ROUTES
+// ═══════════════════════════════════════════════════
+
+// Get all active alerts
+app.get('/alerts', (req, res) => {
+  const activeAlerts = alertsStore.filter(a => a.status !== 'resolved');
+  res.json({ success: true, alerts: activeAlerts });
+});
+
+// Create a new alert (from Doctor)
+app.post('/alerts', (req, res) => {
+  const { doctorName, location, alertType, urgency, patientId, patientName, requirements } = req.body;
+
+  if (!doctorName || !location || !alertType) {
+    return res.status(400).json({ success: false, message: 'doctorName, location, and alertType are required.' });
+  }
+
+  const alert = {
+    id: `alert_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    doctor: doctorName,
+    location,
+    alert: alertType,
+    urgency: urgency || 'high',
+    patientId: patientId || null,
+    patientName: patientName || 'Unknown Patient',
+    requirements: requirements || [],
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    status: 'active',
+    createdAt: new Date().toISOString()
+  };
+
+  alertsStore.push(alert);
+  console.log(`[Alert] ${alertType} triggered by ${doctorName} at ${location}`);
+  res.json({ success: true, alert });
+});
+
+// Respond to an alert (from Admin)
+app.patch('/alerts/:id/respond', (req, res) => {
+  const { id } = req.params;
+  const alert = alertsStore.find(a => a.id === id);
+
+  if (!alert) {
+    return res.status(404).json({ success: false, message: 'Alert not found.' });
+  }
+
+  alert.status = 'resolved';
+  alert.resolvedAt = new Date().toISOString();
+  console.log(`[Alert] ${id} resolved by Admin`);
+  
+  res.json({ success: true, alert });
 });
 
 // ═══════════════════════════════════════════════════
