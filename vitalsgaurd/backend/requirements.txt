@@ -5,5 +5,7 @@ openai>=1.30.0          # Mistral is OpenAI-compatible; we use the Mistral endpo
 httpx>=0.27.0
 numpy>=1.26.0
 scikit-learn>=1.4.0
+tensorflow>=2.15.0
+joblib>=1.3.0
 python-dotenv>=1.0.0
 pydantic>=2.7.0

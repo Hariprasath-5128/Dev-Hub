@@ -120,8 +120,8 @@ export default function IntegratedHealthAnalyzer() {
   };
 
   // Fetch integrated analysis
-  const fetchAnalysis = useCallback(async (vitalsToAnalyze) => {
-    setLoading(true);
+  const fetchAnalysis = useCallback(async (vitalsToAnalyze, isBackground = false) => {
+    if (!isBackground) setLoading(true);
     setError(null);
     try {
       const response = await fetch(`${API_BASE}/integrated/analysis`, {
@@ -176,12 +176,18 @@ export default function IntegratedHealthAnalyzer() {
         ]);
       } else {
         setError(data.error || 'Failed to fetch analysis');
+        // Auto-dismiss error after 5 seconds
+        setTimeout(() => setError(null), 5000);
       }
     } catch (err) {
       console.error('❌ Analysis error:', err);
       // Fallback to mock data on error
       const mockData = generateMockAnalysis(vitalsToAnalyze);
       if (mockData.status === 'success') {
+        setError('⚠️ Backend unreachable. Showing demo data.');
+        // Auto-dismiss error after 5 seconds
+        setTimeout(() => setError(null), 5000);
+        
         setDiagnosis({
           predicted_condition: mockData.model01.predicted_condition,
           confidence: mockData.model01.confidence,
@@ -222,8 +228,8 @@ export default function IntegratedHealthAnalyzer() {
   useEffect(() => {
     fetchAnalysis(vitals);
     const interval = setInterval(() => {
-      fetchAnalysis(vitals);
-    }, 5000); // Refresh every 5 seconds
+      fetchAnalysis(vitals, true); // Background refresh every 5 seconds
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [vitals, fetchAnalysis]);

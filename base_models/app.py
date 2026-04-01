@@ -60,6 +60,9 @@ def predict_disease():
 
         for col in feature_cols1:
             val = data.get(col, defaults.get(col, 0))
+            # Also check for alternate names if standard ones missing
+            if col == "systolic_bp" and "systolic_bp" not in data: val = data.get("bp_systolic", defaults["systolic_bp"])
+            if col == "diastolic_bp" and "diastolic_bp" not in data: val = data.get("bp_diastolic", defaults["diastolic_bp"])
             features.append(float(val))
 
         X = np.array([features])
@@ -114,6 +117,46 @@ def predict_trend_route():
         result = predict_trend(data["sequence"])
         return jsonify(result)
         
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/predict/unified", methods=["POST"])
+def predict_unified_route():
+    """Unified endpoint calling both Model 01 and Model 03."""
+    try:
+        data = request.json
+        if not data: return jsonify({"error": "No JSON payload"}), 400
+        
+        # 1. Run Diagnosis (Model 01)
+        res_01 = {}
+        if model1:
+            features = []
+            for col in feature_cols1:
+                val = data.get(col, 0)
+                if col == "systolic_bp" and "systolic_bp" not in data: val = data.get("bp_systolic", 120)
+                if col == "diastolic_bp" and "diastolic_bp" not in data: val = data.get("bp_diastolic", 80)
+                features.append(float(val))
+            
+            probs = model1.predict_proba(np.array([features]))[0]
+            p_idx = np.argmax(probs)
+            res_01 = {
+                "status": "success",
+                "predicted_condition": le1.inverse_transform([p_idx])[0],
+                "confidence": round(float(probs[p_idx]), 4),
+                "all_probabilities": {le1.inverse_transform([i])[0]: round(float(p), 4) for i, p in enumerate(probs)}
+            }
+        
+        # 2. Run Trend (Model 03)
+        res_03 = {"status": "error", "error": "No sequence"}
+        if "sequence" in data and trend_loaded:
+            res_03 = {"status": "success", **predict_trend(data["sequence"])}
+            
+        return jsonify({
+            "status": "success",
+            "diagnosis": res_01,
+            "trend": res_03,
+            "timestamp": "vitalsguard-flask"
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

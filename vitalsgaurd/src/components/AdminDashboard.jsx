@@ -8,7 +8,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
 import { Header } from './Header';
 import { Footer } from './Footer';
-import { LogOut, Activity, Plus, ArrowRight, Shield, HeartPulse } from 'lucide-react';
+import { LogOut, Activity, Plus, ArrowRight, Shield, HeartPulse, Zap } from 'lucide-react';
 import { Button, ShinyButton } from './ui/button';
 
 function ElegantShape({
@@ -135,6 +135,8 @@ export default function AdminDashboard({ onLogout }) {
 
   const [emergencyCalls, setEmergencyCalls] = useState([]);
   const [acknowledgingIds, setAcknowledgingIds] = useState([]);
+  const [connectionStatus, setConnectionStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -157,17 +159,25 @@ export default function AdminDashboard({ onLogout }) {
         const res = await fetch('http://localhost:5003/alerts');
         const data = await res.json();
         if (data.success) {
+          // Check for new alerts to show toast
+          if (emergencyCalls.length > 0 && data.alerts.length > emergencyCalls.length) {
+            const lastAlert = data.alerts[data.alerts.length - 1];
+            setToast({ message: `NEW EMERGENCY: ${lastAlert.alert} for ${lastAlert.patientName}`, type: 'error' });
+            setTimeout(() => setToast(null), 6000);
+          }
           setEmergencyCalls(data.alerts);
+          setConnectionStatus('online');
         }
       } catch (err) {
         console.error("Failed to fetch alerts:", err);
+        setConnectionStatus('offline');
       }
     };
 
     fetchAlerts();
     const interval = setInterval(fetchAlerts, 3000); // Poll every 3 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [emergencyCalls.length]);
 
   const handleRespondToAlert = async (alertId) => {
     // Optimistic UI update for the "ACK" state
@@ -207,7 +217,7 @@ export default function AdminDashboard({ onLogout }) {
   const chartData = [
     { name: 'Stable', value: counts.stable },
     { name: 'Warning', value: counts.warning },
-    { name: 'Critical', value: counts.critical }
+    { name: 'Critical', value: counts.critical + emergencyCalls.length }
   ];
 
   const COLORS = ['#10b981', '#f59e0b', '#ef4444'];
@@ -296,26 +306,29 @@ export default function AdminDashboard({ onLogout }) {
               className="flex gap-4 items-center"
               initial={{ opacity: 0, scale: 0.8 }}
               whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: false, amount: 0.2 }}
+              viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.5, delay: 0.2 }}
             >
-              <motion.div 
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 systems-live"
-                animate={{ 
-                  boxShadow: ["0 0 0px rgba(59,130,246,0)", "0 0 15px rgba(59,130,246,0.3)", "0 0 0px rgba(59,130,246,0)"]
-                }}
-                transition={{ duration: 2.5, repeat: Infinity }}
-              >
-                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.7)]"></div>
-                <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Systems Live</span>
-              </motion.div>
-              <ShinyButton 
-                variant="pink" 
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 systems-live">
+                  <div style={{ 
+                    width: '10px', 
+                    height: '10px', 
+                    borderRadius: '50%', 
+                    backgroundColor: connectionStatus === 'online' ? '#22c55e' : (connectionStatus === 'checking' ? '#f59e0b' : '#ef4444'),
+                    boxShadow: connectionStatus === 'online' ? '0 0 10px #22c55e' : 'none'
+                  }} />
+                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    {connectionStatus === 'online' ? 'Connected' : (connectionStatus === 'checking' ? 'Connecting...' : 'Offline')}
+                  </span>
+                </div>
+              <Button 
+                variant="outline" 
                 onClick={onLogout}
-                icon={<LogOut className="w-4 h-4" />}
+                className="h-10 px-6 rounded-full border-blue-200 bg-white text-blue-600 hover:bg-blue-50 shadow-sm font-bold flex items-center gap-2"
               >
+                <LogOut className="w-4 h-4" />
                 Logout
-              </ShinyButton>
+              </Button>
             </motion.div>
           </motion.div>
         </div>
@@ -330,16 +343,16 @@ export default function AdminDashboard({ onLogout }) {
               {[
                 { label: 'TOTAL PATIENTS', value: patients.length, detail: 'Across all wards', color: '#10b981' },
                 { label: 'ACTIVE WARNINGS', value: counts.warning, detail: 'Moderately unstable', color: '#f59e0b' },
-                { label: 'CRITICAL ALERTS', value: counts.critical, detail: 'Immediate action req.', color: '#ef4444' }
+                { label: 'CRITICAL ALERTS', value: counts.critical + emergencyCalls.length, detail: 'Immediate action req.', color: '#ef4444' }
               ].map((kpi, idx) => (
                 <motion.div
                   key={idx}
                   initial={{ opacity: 0, y: 20, scale: 0.95 }}
                   whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                  viewport={{ once: false, amount: 0.2 }}
+                  viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.5, delay: idx * 0.1 }}
                   whileHover={{ y: -4, scale: 1.02 }}
-                  style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(10px)', padding: '1.5rem', borderRadius: '24px', border: '1px solid rgba(16,185,129,0.15)', boxShadow: '0 10px 30px rgba(15,45,88,0.05)' }}
+                  style={{ background: 'rgba(255,255,255,0.88)', padding: '1.5rem', borderRadius: '24px', border: '1.5px solid #cbd5e1', boxShadow: '0 10px 30px rgba(15,45,88,0.05)' }}
                 >
                   <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '12px', fontWeight: '800' }}>
                     {kpi.label}
@@ -348,7 +361,7 @@ export default function AdminDashboard({ onLogout }) {
                     style={{ fontSize: '3rem', fontWeight: '900', color: kpi.color }}
                     initial={{ scale: 0.5, opacity: 0 }}
                     whileInView={{ scale: 1, opacity: 1 }}
-                    viewport={{ once: false, amount: 0.2 }}
+                    viewport={{ once: true, amount: 0.2 }}
                     transition={{ duration: 0.6, delay: idx * 0.1 + 0.2 }}
                   >
                     {kpi.value}
@@ -361,9 +374,9 @@ export default function AdminDashboard({ onLogout }) {
               <motion.div 
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: false, amount: 0.2 }}
+                viewport={{ once: true, amount: 0.2 }}
                 transition={{ duration: 0.5, delay: 0.4 }}
-                style={{ gridColumn: 'span 3', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(10px)', padding: '1.5rem', borderRadius: '24px', border: '1px solid rgba(16,185,129,0.15)', boxShadow: '0 10px 30px rgba(15,45,88,0.05)' }}
+                style={{ gridColumn: 'span 3', background: 'rgba(255,255,255,0.88)', padding: '1.5rem', borderRadius: '24px', border: '1.5px solid #cbd5e1', boxShadow: '0 10px 30px rgba(15,45,88,0.05)' }}
               >
                  <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1rem', fontWeight: '700', color: '#64748b' }}>PATIENT STATUS DISTRIBUTION</h3>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
@@ -395,7 +408,7 @@ export default function AdminDashboard({ onLogout }) {
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: false, amount: 0.2 }}
+              viewport={{ once: true, amount: 0.2 }}
               style={{ height: '100%' }}
             >
               <BorderRotate
@@ -404,15 +417,17 @@ export default function AdminDashboard({ onLogout }) {
                 style={{ padding: '2px', height: '100%' }}
                 gradientColors={{ primary: '#10b981', secondary: '#34d399', accent: '#f7a7c0' }}
               >
-                <div style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', padding: '2rem', borderRadius: '32px', border: '1px solid rgba(16,185,129,0.15)', boxShadow: '0 20px 40px rgba(16,185,129,0.05)', height: 'calc(100% - 4px)' }}>
+                <div style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', padding: '2rem', borderRadius: '32px', border: '1.5px solid #cbd5e1', boxShadow: '0 20px 40px rgba(16,185,129,0.05)', height: 'calc(100% - 4px)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#1e293b' }}>🚨 DOCTOR EMERGENCY DISPATCH</h3>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Activity className="w-5 h-5 text-red-500" /> DOCTOR EMERGENCY DISPATCH
+                  </h3>
                   <motion.div 
-                    style={{ background: '#ef4444', color: 'white', padding: '4px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold' }}
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
+                    style={{ background: 'rgba(254, 226, 226, 0.4)', color: '#dc2626', padding: '6px 14px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', border: '1.5px solid rgba(220, 38, 38, 0.25)', letterSpacing: '0.05em' }}
+                    animate={{ scale: [1, 1.05, 1] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                   >
-                    {emergencyCalls.length} ACTIVE
+                    {emergencyCalls.length} ACTIVE EMERGENCY
                   </motion.div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -426,7 +441,7 @@ export default function AdminDashboard({ onLogout }) {
                           x: 0,
                           backgroundColor: acknowledgingIds.includes(call.id) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(248, 250, 252, 0.8)',
                         }}
-                        viewport={{ once: false, amount: 0.2 }}
+                        viewport={{ once: true, amount: 0.2 }}
                         exit={{ opacity: 0, x: 20 }}
                         transition={{ duration: 0.4, delay: idx * 0.1 }}
                         whileHover={{ scale: 1.01 }}
@@ -448,8 +463,8 @@ export default function AdminDashboard({ onLogout }) {
                             {call.requirements && call.requirements.length > 0 && (
                               <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap' }}>
                                 {call.requirements.map((req, rIdx) => (
-                                  <span key={rIdx} style={{ fontSize: '10px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#475569', border: '1px solid #e2e8f0' }}>
-                                    🛠️ {req}
+                                  <span key={rIdx} style={{ fontSize: '10px', background: '#f8fafc', padding: '2px 8px', borderRadius: '4px', color: '#475569', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <div style={{ width: '4px', height: '4px', background: '#94a3b8', borderRadius: '50%' }} /> {req}
                                   </span>
                                 ))}
                               </div>
@@ -458,43 +473,24 @@ export default function AdminDashboard({ onLogout }) {
                         </div>
 
                         <div className="flex justify-center">
-                          <ShinyButton
-                            variant={acknowledgingIds.includes(call.id) ? 'blue' : 'green'}
-                            className="scale-90 h-8 px-3 text-[10px]"
-                            icon={acknowledgingIds.includes(call.id) ? undefined : <Activity className="w-3 h-3" />}
+                          <Button
+                            variant="outline"
+                            className={`scale-90 h-8 px-3 text-[10px] uppercase font-black transition-all ${
+                              acknowledgingIds.includes(call.id) 
+                              ? 'border-blue-200 bg-blue-50/50 text-blue-600' 
+                              : 'border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300'
+                            }`}
                             onClick={() => handleRespondToAlert(call.id)}
                             disabled={acknowledgingIds.includes(call.id)}
                           >
-                            {acknowledgingIds.includes(call.id) ? 'ACK' : 'RESPOND'}
-                          </ShinyButton>
+                            {acknowledgingIds.includes(call.id) ? 'ACKNOWLEDGED' : 'RESPOND NOW'}
+                          </Button>
                         </div>
                       </motion.div>
                     ))}
                   </AnimatePresence>
                 </div>
 
-                <ShinyButton
-                  variant="blue"
-                  className="w-full mt-6 h-10 text-xs"
-                  icon={<Plus className="w-3 h-3" />}
-                  onClick={async () => {
-                    // Simulation button to create a new alert via API
-                    try {
-                      await fetch('http://localhost:5003/alerts', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          doctorName: "SIMULATOR",
-                          location: "Test Range",
-                          alertType: "Simulation Call",
-                          urgency: "high"
-                        })
-                      });
-                    } catch (e) { console.error(e); }
-                  }}
-                >
-                  SIMULATED CALL
-                </ShinyButton>
                 </div>
               </BorderRotate>
             </motion.div>
@@ -505,7 +501,7 @@ export default function AdminDashboard({ onLogout }) {
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: false, amount: 0.1 }}
+            viewport={{ once: true, amount: 0.1 }}
             transition={{ duration: 0.5, delay: 0.5 }}
           >
             <BorderRotate
@@ -514,9 +510,12 @@ export default function AdminDashboard({ onLogout }) {
               style={{ padding: '2px' }}
               gradientColors={{ primary: '#3b82f6', secondary: '#60a5fa', accent: '#0f2d58' }}
             >
-              <div style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', borderRadius: '28px', padding: '2rem', border: '1px solid rgba(15, 45, 88, 0.1)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+              <div style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', borderRadius: '28px', padding: '2rem', border: '1.5px solid #cbd5e1', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
               <h3 style={{ margin: '0 0 2rem 0', fontSize: '1.2rem', fontWeight: '900', color: '#0f2d58', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ padding: '8px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.1)' }}>⚡</span> INFRASTRUCTURE MONITORING
+                <div style={{ padding: '8px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.1)', display: 'grid', placeItems: 'center' }}>
+                  <Zap className="w-5 h-5 text-blue-500 fill-blue-500/20" />
+                </div> 
+                INFRASTRUCTURE MONITORING
               </h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
                 
@@ -524,8 +523,8 @@ export default function AdminDashboard({ onLogout }) {
                 <motion.div 
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: false, amount: 0.2 }}
-                  style={{ background: 'rgba(255,255,255,0.5)', padding: '1.5rem', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.1)' }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  style={{ background: '#fff', padding: '1.5rem', borderRadius: '20px', border: '1.5px solid #d1d5db', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
                  >
                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                      <span style={{ fontWeight: 'bold', color: '#3b82f6', fontSize: '0.8rem' }}>ELECTRICAL</span>
@@ -547,8 +546,8 @@ export default function AdminDashboard({ onLogout }) {
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }}
                   whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: false, amount: 0.2 }}
-                  style={{ background: 'rgba(255,255,255,0.5)', padding: '1.5rem', borderRadius: '20px', border: '1px solid rgba(16,185,129,0.1)' }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  style={{ background: '#fff', padding: '1.5rem', borderRadius: '20px', border: '1.5px solid #d1d5db', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
                 >
                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                      <span style={{ fontWeight: 'bold', color: '#3b82f6', fontSize: '0.8rem' }}>MEDICAL GAS</span>
@@ -570,8 +569,8 @@ export default function AdminDashboard({ onLogout }) {
                 <motion.div 
                   initial={{ opacity: 0, x: 20 }}
                   whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: false, amount: 0.2 }}
-                  style={{ background: 'rgba(15, 45, 88, 0.05)', padding: '1.5rem', borderRadius: '20px', border: '1px solid rgba(15, 45, 88, 0.2)' }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '20px', border: '1.5px solid #d1d5db', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
                 >
                    <h4 style={{ margin: '0 0 0.5rem 0', color: '#0f2d58', fontSize: '0.9rem', fontWeight: 'bold' }}>AI RESOURCE SUGGESTION</h4>
                    <p style={{ fontSize: '0.8rem', color: '#475569', lineHeight: '1.4' }}>
@@ -585,6 +584,41 @@ export default function AdminDashboard({ onLogout }) {
           </motion.div>
         </main>
         <Footer />
+        
+        {/* Toast Notification */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: 50, scale: 0.8 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5 }}
+              style={{
+                position: 'fixed',
+                bottom: '2rem',
+                right: '2rem',
+                background: '#ef4444',
+                color: 'white',
+                padding: '1rem 2rem',
+                borderRadius: '16px',
+                boxShadow: '0 10px 30px rgba(239, 68, 68, 0.3)',
+                zIndex: 1000,
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                border: '2px solid rgba(255,255,255,0.2)'
+              }}
+            >
+              <span>{toast.message}</span>
+              <button 
+                onClick={() => setToast(null)}
+                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <style>

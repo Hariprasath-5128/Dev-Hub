@@ -45,10 +45,9 @@ export function Header({ links = [] }) {
 	return (
 		<header
 			className={cn(
-				'sticky top-0 z-50 mx-auto w-full max-w-3xl border-b border-transparent md:rounded-md md:border md:transition-all md:ease-out',
+				'sticky top-0 z-50 mx-auto w-full max-w-3xl bg-white shadow-sm md:rounded-xl md:mt-4 md:shadow-md md:transition-all md:ease-out',
 				{
-					'bg-background/95 supports-[backdrop-filter]:bg-background/50 border-border backdrop-blur-lg md:top-4 md:max-w-2xl md:shadow':
-						scrolled && !open,
+					'md:max-w-2xl': scrolled && !open,
 					'bg-background/90': open,
 				},
 			)}

@@ -12,7 +12,7 @@ import joblib
 
 def load_model():
     """Load the trained model, label encoder, and feature columns."""
-    model_dir = "01_health_predictor/model"
+    model_dir = os.path.join(os.path.dirname(__file__), "model")
     model = joblib.load(os.path.join(model_dir, "health_predictor_xgb.pkl"))
     le = joblib.load(os.path.join(model_dir, "label_encoder.pkl"))
     feature_cols = joblib.load(os.path.join(model_dir, "feature_columns.pkl"))

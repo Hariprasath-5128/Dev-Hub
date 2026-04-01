@@ -358,7 +358,7 @@ app.post('/alerts', (req, res) => {
   };
 
   alertsStore.push(alert);
-  console.log(`[Alert] ${alertType} triggered by ${doctorName} at ${location}`);
+  console.log(`[${new Date().toISOString()}] ALERT: ${alertType} (${urgency}) triggered by ${doctorName} at ${location}`);
   res.json({ success: true, alert });
 });
 

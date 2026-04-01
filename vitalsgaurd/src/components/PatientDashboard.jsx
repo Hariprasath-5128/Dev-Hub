@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { HeartPulse, User, Stethoscope, Shield, LogOut, Activity, Plus, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { HeartPulse, User, Stethoscope, Shield, LogOut, Activity, Plus, ArrowRight, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
 import { patients } from '../data/mockVitals';
 import DigitalTwin from './DigitalTwin';
 import M1 from './m1';
+import { Button } from './ui/button';
 
 const API_BASES = ['http://localhost:5000/api', 'http://localhost:8000/api'];
 const NODE_API_BASE = 'http://localhost:5003';
@@ -68,7 +69,6 @@ function ElegantShape({
             background: gradient,
             border: "1.5px solid rgba(255,255,255,0.72)",
             boxShadow: "0 34px 90px rgba(247,167,192,0.3)",
-            backdropFilter: "blur(10px)",
           }}
         />
         <div
@@ -130,7 +130,6 @@ const BorderRotate = ({
         borderRadius: `calc(${borderRadius}px - ${borderWidth}px)`,
         height: '100%',
         width: '100%',
-        backdropFilter: 'blur(12px)',
         zIndex: 1,
         display: 'flex',
         flexDirection: 'column'
@@ -413,6 +412,20 @@ export default function PatientDashboard({ userId, onLogout }) {
   const [appointmentLoading, setAppointmentLoading] = useState(false);
   const [appointmentError, setAppointmentError] = useState('');
   const [appointmentSuccess, setAppointmentSuccess] = useState('');
+
+  // Synchronize Digital Twin vitals with manual slider inputs in real-time
+  useEffect(() => {
+    setDigitalTwinData(prev => ({
+      ...prev,
+      vitals: {
+        heart_rate: inputHr,
+        spo2: inputSpo2,
+        temperature: inputTemp,
+        systolic_bp: inputBpSystolic,
+        diastolic_bp: inputBpDiastolic
+      }
+    }));
+  }, [inputHr, inputSpo2, inputTemp, inputBpSystolic, inputBpDiastolic]);
   
   // Report Analysis State
   const [reportImage, setReportImage] = useState(null);
@@ -521,108 +534,72 @@ export default function PatientDashboard({ userId, onLogout }) {
         bp_diastolic: Number(inputBpDiastolic)
       };
 
-      // Fetch Disease Fingerprints (Current Classification)
       try {
-        const modelUrls = API_BASES.flatMap((base) => [
-          `${base}/fingerprint`,
-          `${base}/predict/disease`
-        ]);
-        const data01 = await postJsonWithFallback(modelUrls, payload);
+        // Build sequence for Model 03 (Trend)
+        const sequence = vitalsHistory.slice(-24).map(v => ({ 
+          heart_rate: v.hr, 
+          spo2: v.spo2, 
+          temperature: v.temp, 
+          respiratory_rate: 16 
+        }));
 
-        let predictedCondition = 'Normal';
-        let confidence = 0;
-        let allProbabilities = {};
-        let chartData = [];
+        const unifiedPayload = {
+          ...payload,
+          sequence: sequence.length >= 5 ? sequence : null
+        };
 
-        if (Array.isArray(data01.fingerprints) && data01.fingerprints.length > 0) {
-          const sortedFingerprints = [...data01.fingerprints].sort((a, b) => (b.probability || 0) - (a.probability || 0));
+        // Unified call for Model 01 and Model 03
+        const unifiedRes = await postJsonWithFallback(
+          API_BASES.map(b => `${b}/predict/unified`), 
+          unifiedPayload
+        );
 
-          allProbabilities = sortedFingerprints.reduce((acc, fp) => {
-            if (fp?.disease) acc[fp.disease] = fp.probability || 0;
-            return acc;
-          }, {});
+        if (unifiedRes.status === 'success') {
+          const data01 = unifiedRes.diagnosis;
+          const data03 = unifiedRes.trend;
 
-          chartData = sortedFingerprints.map(fp => ({
-            name: fp.disease.replace('_', ' '),
-            Probability: parseFloat(((fp.probability || 0) * 100).toFixed(1))
-          })).slice(0, 5);
-
-          predictedCondition = sortedFingerprints[0]?.disease || 'Normal';
-          confidence = sortedFingerprints[0]?.probability || 0;
-        } else if (data01.all_probabilities && typeof data01.all_probabilities === 'object') {
-          allProbabilities = data01.all_probabilities;
-          const sortedProbabilities = Object.entries(allProbabilities).sort(([, a], [, b]) => b - a);
-
-          chartData = sortedProbabilities.map(([name, prob]) => ({
-            name: name.replace('_', ' '),
-            Probability: parseFloat((prob * 100).toFixed(1))
-          })).slice(0, 5);
-
-          predictedCondition = data01.predicted_condition || sortedProbabilities[0]?.[0] || 'Normal';
-          confidence = typeof data01.confidence === 'number' ? data01.confidence : (sortedProbabilities[0]?.[1] || 0);
-        }
-
-        if (Object.keys(allProbabilities).length > 0) {
-          setMlResult({
-            predicted_condition: predictedCondition,
-            confidence,
-            chartData,
-            all_probabilities: allProbabilities
-          });
-
-          const maxProb = Math.max(...Object.values(allProbabilities));
-          const currentScore = Math.round(maxProb * 100);
-          // PREVENT CONFLICT: severityScore is now exclusively driven by calculateLinearRisk in the 1500ms loop.
-
-          // Prefer dedicated trajectory endpoint; fallback to EWS-based synthetic trajectory.
-          try {
-            const trajectoryRes = await postJsonWithFallback(
-              API_BASES.map((base) => `${base}/predict/trajectory`),
-              payload
-            );
-            if (trajectoryRes.trajectory && Array.isArray(trajectoryRes.trajectory)) {
-              console.log("✓ Trajectory data received:", trajectoryRes.trajectory);
-              setTrajectoryData(trajectoryRes.trajectory);
-            } else {
-              throw new Error('Trajectory payload missing');
-            }
-          } catch (trajErr) {
-            console.log("Trajectory endpoint not available, falling back to EWS", trajErr);
-            try {
-              const data07 = await postJsonWithFallback(
-                API_BASES.map((base) => `${base}/ews`),
-                payload
-              );
-              if (data07.ews) {
-                const ewsScore = data07.ews.score;
-                const simulatedTrajectory = [];
-                for (let hour = 0; hour <= 24; hour++) {
-                  let riskValue = currentScore;
-                  const isAbnormal = ewsScore > 3;
-                  if (isAbnormal) {
-                    riskValue = Math.min(currentScore + (hour * 2.5), 95);
-                    if (hour > 12) riskValue = Math.max(riskValue - (hour - 12) * 1.2, currentScore);
-                  } else {
-                    riskValue = Math.max(currentScore - (hour * 1.5), Math.max(0, currentScore - 25));
-                  }
-                  simulatedTrajectory.push({ hour, risk: Math.round(riskValue) });
-                }
-                setTrajectoryData(simulatedTrajectory);
-              }
-            } catch (ewsErr) {
-              console.log("EWS trajectory fallback active", ewsErr);
-            }
+          // 1. Update Model 01 (Diagnosis)
+          if (data01.all_probabilities) {
+            const sortedProbabilities = Object.entries(data01.all_probabilities).sort(([, a], [, b]) => b - a);
+            setMlResult({
+              predicted_condition: data01.predicted_condition,
+              confidence: data01.confidence,
+              chartData: sortedProbabilities.map(([name, prob]) => ({
+                name: name.replace('_', ' '),
+                Probability: parseFloat((prob * 100).toFixed(1))
+              })).slice(0, 5),
+              all_probabilities: data01.all_probabilities
+            });
           }
+
+          // 2. Update Model 03 (Trend)
+          if (data03.status === 'success') {
+            setTrendResult(data03);
+          }
+
+          // 3. Update Trajectory (Model 07 fallback or separate call if needed)
+          // For now, we reuse the diagnosis confidence for the simple trajectory
+          const currentScore = Math.round((data01.confidence || 0) * 100);
+          const simulatedTrajectory = [];
+          for (let hour = 0; hour <= 24; hour += 2) {
+            let riskValue = currentScore;
+            const isAbnormal = data01.confidence > 0.4;
+            if (isAbnormal) {
+              riskValue = Math.min(currentScore + (hour * 2.0), 95);
+              if (hour > 12) riskValue = Math.max(riskValue - (hour - 12) * 1.5, currentScore);
+            } else {
+              riskValue = Math.max(currentScore - (hour * 1.5), 10);
+            }
+            simulatedTrajectory.push({ hour, risk: Math.round(riskValue) });
+          }
+          setTrajectoryData(simulatedTrajectory);
         }
-      } catch (err) { console.error("Fingerprint API failed", err); }
-      try {
-        const sequence = vitalsHistory.slice(-16).map(v => ({ heart_rate: v.hr, spo2: v.spo2, temperature: v.temp, respiratory_rate: 16 }));
-        if (sequence.length >= 5) {
-          const trendData = await postJsonWithFallback(API_BASES.map(b => `${b}/predict/trend`), { sequence });
-          setTrendResult(trendData);
-        }
-      } catch (err) { console.error("Trend Analysis failed", err); }
+      } catch (err) {
+        console.error("Unified AI Analysis failed", err);
+        // Silently fail or use dummy data if needed
+      }
     }, 400);
+
     return () => clearTimeout(timer);
   }, [inputHr, inputSpo2, inputTemp, inputBpSystolic, inputBpDiastolic, vitalsHistory, activeTab]);
 
@@ -721,10 +698,12 @@ export default function PatientDashboard({ userId, onLogout }) {
       }
 
       setAppointmentSuccess('Appointment booked successfully.');
+      setTimeout(() => setAppointmentSuccess(''), 5000);
       setSelectedSlot(null);
       await refreshAppointmentData();
     } catch (err) {
       setAppointmentError(err?.response?.data?.message || err?.message || 'Booking failed.');
+      setTimeout(() => setAppointmentError(''), 5000);
     }
   };
 
@@ -964,7 +943,6 @@ export default function PatientDashboard({ userId, onLogout }) {
         }
         .premium-card {
           background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(12px);
           border-radius: 24px;
           border: 1px solid rgba(247, 167, 192, 0.2);
           box-shadow: 0 10px 30px rgba(131, 24, 67, 0.05);
@@ -1048,7 +1026,7 @@ export default function PatientDashboard({ userId, onLogout }) {
         />
       </div>
 
-      <header style={{ position: "relative", zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.2rem 2.5rem', background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(247,167,192,0.2)', position: 'sticky', top: 0 }}>
+      <header style={{ position: "relative", zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.2rem 2.5rem', background: 'rgba(255, 255, 255, 0.95)', borderBottom: '1px solid rgba(247,167,192,0.2)', position: 'sticky', top: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg, #fbcfe8, #ffe4e9)', display: 'grid', placeItems: 'center', boxShadow: '0 8px 16px rgba(251,207,232,0.3)' }}>
             <HeartPulse color="#e11d48" size={24} />
@@ -1079,13 +1057,13 @@ export default function PatientDashboard({ userId, onLogout }) {
             </button>
           ))}
         </nav>
-        <MetalButton 
+        <Button 
+          variant="outline"
           onClick={onLogout} 
-          accentRgb={[225, 29, 72]}
-          style={{ height: '40px', borderRadius: '10px', color: '#0f172a' }}
+          className="h-10 px-6 rounded-full border-blue-200 bg-white text-blue-600 hover:bg-blue-50 shadow-sm font-bold flex items-center gap-2"
         >
-          <LogOut size={16} /> Logout
-        </MetalButton>
+          <LogOut className="w-4 h-4" /> Logout
+        </Button>
       </header>
 
       <main style={{ position: "relative", zIndex: 1, padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
@@ -1400,13 +1378,13 @@ export default function PatientDashboard({ userId, onLogout }) {
                 <h3 style={{ margin: 0, color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>🤖</span> Live AI Multi-Agent Interaction
                 </h3>
-                <button
+                <Button
                   onClick={handleRunAgentDebateScan}
                   disabled={agentScanLoading}
-                  style={{ padding: '0.6rem 1.2rem', backgroundColor: '#7C3AED', color: 'white', border: 'none', borderRadius: '8px', cursor: agentScanLoading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                  className="h-11 px-8 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md font-bold flex items-center gap-2"
                 >
                   {agentScanLoading ? 'Scanning Patient...' : 'Run Phidata Agent Scan ✨'}
-                </button>
+                </Button>
               </div>
 
               {/* Current Vital Signs - Always Visible */}
@@ -1524,19 +1502,20 @@ export default function PatientDashboard({ userId, onLogout }) {
                       <img src={`data:image/jpeg;base64,${reportImage}`} alt="Report Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
                     <div style={{ display: 'flex', gap: '0.75rem' }}>
-                      <button 
+                      <Button 
+                        variant="outline"
                         onClick={() => { setReportImage(null); setReportFileName(''); setReportResult(null); }}
-                        style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', color: '#64748b', fontWeight: '700', cursor: 'pointer', fontSize: '0.85rem' }}
+                        className="flex-1 h-10 rounded-lg border-slate-200 bg-white text-slate-500 hover:bg-slate-50 font-bold"
                       >
                         Clear
-                      </button>
-                      <button 
+                      </Button>
+                      <Button 
                         onClick={handleRunReportAnalysis}
                         disabled={reportLoading}
-                        style={{ flex: 2, padding: '0.6rem', borderRadius: '8px', border: 'none', background: '#7C3AED', color: 'white', fontWeight: '700', cursor: reportLoading ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}
+                        className="flex-[2] h-10 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-bold"
                       >
                         {reportLoading ? 'Analyzing...' : 'Run Cross-Analysis ✨'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -1628,15 +1607,18 @@ export default function PatientDashboard({ userId, onLogout }) {
                       setAppointmentError('');
                       setAppointmentSuccess('');
                     }}
-                    style={{ padding: '0.6rem 0.8rem', borderRadius: '10px', border: '1px solid #ffe4e9', fontSize: '0.9rem', color: '#000000', backgroundColor: '#fff5f7', fontWeight: '800' }}
+                    style={{ padding: '0.6rem 0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.9rem', color: '#0f172a', backgroundColor: '#fff', fontWeight: '700' }}
                   />
                 </div>
-                <MetalButton
+                <Button
+                  variant="outline"
                   onClick={refreshAppointmentData}
-                  style={{ height: '42px', padding: '0 1.5rem', backgroundColor: '#fbcfe8', color: '#000000', fontWeight: '900' }}
+                  disabled={appointmentLoading}
+                  className="h-10 px-6 rounded-xl border-blue-200 bg-white text-blue-600 hover:bg-blue-50 shadow-sm font-bold flex items-center gap-2"
                 >
-                  Refresh Slots
-                </MetalButton>
+                  <RefreshCw className={cn("w-4 h-4", appointmentLoading && "animate-spin")} />
+                  {appointmentLoading ? 'Refreshing...' : 'Refresh Slots'}
+                </Button>
               </div>
             </div>
 
@@ -1689,11 +1671,10 @@ export default function PatientDashboard({ userId, onLogout }) {
                             const isSelected = selectedSlot && selectedSlot.doctorId === doctor.id && selectedSlot.start === slot.start;
                             const isDisabled = !appointmentEligibility.discharged || !slot.available;
                             return (
-                              <MetalButton
+                              <Button
                                 key={`${doctor.id}-${slot.start}`}
+                                variant={isSelected ? "default" : "outline"}
                                 disabled={isDisabled}
-                                active={isSelected}
-                                variant={isSelected ? "primary" : "outline"}
                                 onClick={() => {
                                   setSelectedSlot({
                                     doctorId: doctor.id,
@@ -1705,23 +1686,15 @@ export default function PatientDashboard({ userId, onLogout }) {
                                   setAppointmentError('');
                                   setAppointmentSuccess('');
                                 }}
-                                style={{
-                                  fontSize: '0.85rem',
-                                  height: '36px',
-                                  padding: '0 0.5rem',
-                                  opacity: isDisabled ? 0.6 : 1,
-                                  color: isSelected ? '#4f46e5' : (isDisabled ? '#94a3b8' : '#000000'), 
-                                  fontWeight: isSelected ? '950' : '700', 
-                                  backgroundColor: isSelected ? '#eef2ff' : (!slot.available ? '#f1f5f9' : (isDisabled ? '#f8fafc' : 'white')), 
-                                  border: isSelected ? '2px solid #4f46e5' : (!slot.available ? '1px solid #cbd5e1' : (isDisabled ? '1px solid #e2e8f0' : '1px solid #ffe4e9')),
-                                  boxShadow: isSelected ? '0 0 15px rgba(79, 70, 229, 0.15)' : 'none',
-                                  cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                  filter: !slot.available ? 'grayscale(100%) brightness(0.95)' : 'none'
-                                }}
+                                className={cn(
+                                  "text-[0.75rem] h-9 px-2 rounded-lg font-bold transition-all",
+                                  isSelected ? "bg-blue-600 text-white shadow-md" : "bg-white text-slate-700",
+                                  !slot.available && "opacity-40 grayscale cursor-not-allowed"
+                                )}
                                 title={slot.available ? 'Available' : 'Already booked'}
                               >
                                 {formatSlotTime(slot.start)}
-                              </MetalButton>
+                              </Button>
                             );
                           })}
                         </div>
@@ -1749,21 +1722,18 @@ export default function PatientDashboard({ userId, onLogout }) {
                     </div>
                   )}
 
-                  <MetalButton
-                    className="metal-btn--block"
+                  <Button
+                    className="w-full h-12 text-sm font-black rounded-xl uppercase tracking-wider"
                     disabled={!selectedSlot || !appointmentEligibility.discharged || appointmentLoading}
                     onClick={handleBookAppointment}
-                    accentRgb={[190, 24, 93]}
                     style={{ 
-                      marginTop: '1.5rem', 
-                      height: '48px', 
-                      backgroundColor: '#be185d', 
-                      color: '#ffffff', 
-                      fontWeight: '900' 
+                      backgroundColor: appointmentLoading ? '#94a3b8' : (selectedSlot ? '#2563eb' : '#94a3b8'), 
+                      color: '#ffffff',
+                      boxShadow: selectedSlot ? '0 10px 20px rgba(37, 99, 235, 0.2)' : 'none'
                     }}
                   >
-                    Confirm Booking
-                  </MetalButton>
+                    {appointmentLoading ? 'Processing...' : 'Confirm Clinical Booking'}
+                  </Button>
                 </div>
 
                 <div className="premium-card" style={{ padding: '1.5rem', background: '#fff' }}>

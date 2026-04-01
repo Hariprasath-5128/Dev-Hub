@@ -6,7 +6,7 @@ import CriticalOverlay from './CriticalOverlay';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { Button, ShinyButton } from './ui/button';
-import { AlertTriangle, Sparkles, UserMinus } from 'lucide-react';
+import { AlertTriangle, Sparkles, UserMinus, Activity, Thermometer, Droplets, BarChart3, Building2, Scale, MessageSquare, CheckCircle2 } from 'lucide-react';
 import { patients as initialPatients } from '../data/mockVitals';
 import axios from 'axios';
 
@@ -127,7 +127,7 @@ function Notification({ message, type = 'success', onClose }) {
                 gap: '12px'
             }}
         >
-            <span style={{ fontSize: '1.2rem' }}>{type === 'success' ? '✅' : '⚠️'}</span>
+            {type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <AlertTriangle className="w-5 h-5 text-orange-500" />}
             <span style={{ color: type === 'success' ? '#065f46' : '#9a3412', fontWeight: '700', fontSize: '0.95rem' }}>{message}</span>
         </motion.div>
     );
@@ -142,7 +142,29 @@ export default function DoctorDashboard({ onLogout }) {
     const [activeAlerts, setActiveAlerts] = useState({}); // { [patientId]: alertId }
     const [customRequirement, setCustomRequirement] = useState("");
     const [dischargeModal, setDischargeModal] = useState({ isOpen: false, patientId: null, patientName: "" });
+    const [connectionStatus, setConnectionStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
+    const [lastScanTime, setLastScanTime] = useState(null);
     const [notification, setNotification] = useState(null);
+  
+    const handleCloseNotification = React.useCallback(() => {
+        setNotification(null);
+    }, []);
+
+    // Connection Check for Command Center
+    useEffect(() => {
+        const checkConnection = async () => {
+            try {
+                const res = await axios.get(`${API_BASE}/health`);
+                if (res.data.status === 'ok') setConnectionStatus('online');
+                else setConnectionStatus('offline');
+            } catch (e) {
+                setConnectionStatus('offline');
+            }
+        };
+        checkConnection();
+        const interval = setInterval(checkConnection, 10000);
+        return () => clearInterval(interval);
+    }, []);
 
     const activePatient = patientsList.find(p => p.id === activePatientId) || patientsList[0];
 
@@ -373,10 +395,23 @@ export default function DoctorDashboard({ onLogout }) {
                 <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0.65rem 1.5rem 0.35rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                            <div style={{ width: 42, height: 42, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, #79b8ff, #d2e9ff)', boxShadow: '0 8px 16px rgba(121,184,255,0.16)', fontSize: 20 }}>🏥</div>
+                            <div style={{ width: 42, height: 42, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, #79b8ff, #d2e9ff)', boxShadow: '0 8px 16px rgba(121,184,255,0.16)' }}>
+                                <Building2 className="w-5 h-5 text-blue-600" />
+                            </div>
                             <div>
                                 <h1 style={{ margin: 0, color: '#1c4372', fontSize: '1.35rem', fontWeight: 900, letterSpacing: '-0.02em' }}>Doctor <span style={{ color: '#2f77d6' }}>Command Center</span></h1>
-                                <p style={{ margin: '2px 0 0', color: '#5f7fa6', fontSize: '12px', fontWeight: 600 }}>Pleasant, calm access for connected care teams</p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                                    <div style={{ 
+                                        width: '8px', 
+                                        height: '8px', 
+                                        borderRadius: '50%', 
+                                        backgroundColor: connectionStatus === 'online' ? '#22c55e' : (connectionStatus === 'checking' ? '#f59e0b' : '#ef4444'),
+                                        boxShadow: connectionStatus === 'online' ? '0 0 8px #22c55e' : 'none'
+                                    }} />
+                                    <p style={{ margin: 0, color: '#5f7fa6', fontSize: '12px', fontWeight: 600 }}>
+                                        {connectionStatus === 'online' ? 'Connected to Command Center' : (connectionStatus === 'checking' ? 'Connecting...' : 'Command Center Offline')}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                         <Button
@@ -390,7 +425,7 @@ export default function DoctorDashboard({ onLogout }) {
                 </div>
 
                 <section className="doctor-top-row" style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 1.5rem 1.5rem' }}>
-                    <div className="patient-list premium-card" style={{ background: 'rgba(255,255,255,0.88)', border: '1px solid rgba(121,184,255,0.24)', backdropFilter: 'blur(10px)', borderRadius: '22px', boxShadow: '0 10px 30px rgba(23,59,103,0.06)', height: 'calc(100vh - 170px)', minHeight: 520, display: 'flex', flexDirection: 'column' }}>
+                    <div className="patient-list premium-card" style={{ background: 'rgba(255,255,255,0.88)', border: '1.5px solid #cbd5e1', borderRadius: '22px', boxShadow: '0 10px 30px rgba(23,59,103,0.06)', height: 'calc(100vh - 170px)', minHeight: 520, display: 'flex', flexDirection: 'column' }}>
                         <h2 style={{ color: '#2f77d6', marginBottom: '1rem', fontSize: '1.05rem', fontWeight: '800' }}>In-Patient Assignments</h2>
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingRight: '6px', paddingBottom: '110px', scrollBehavior: 'smooth', scrollbarGutter: 'stable' }}>
                             {[...patientsList]
@@ -411,7 +446,7 @@ export default function DoctorDashboard({ onLogout }) {
                                             marginBottom: '0.55rem',
                                             cursor: 'pointer',
                                             transition: 'all 0.2s',
-                                            border: p.id === activePatientId ? '2px solid #79b8ff' : '1px solid rgba(121, 184, 255, 0.2)',
+                                            border: p.id === activePatientId ? '2px solid #2f77d6' : '1.5px solid #cbd5e1',
                                             backgroundColor: p.id === activePatientId ? '#eef7ff' : '#fff',
                                             display: 'flex',
                                             flexDirection: 'column',
@@ -454,8 +489,8 @@ export default function DoctorDashboard({ onLogout }) {
                             <li aria-hidden="true" style={{ height: '90px', pointerEvents: 'none' }} />
                         </ul>
                     </div>
-
-                    <div className="patient-summary" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(121,184,255,0.25)', backdropFilter: 'blur(12px)', borderRadius: '30px', boxShadow: '0 15px 35px rgba(15, 45, 88, 0.08)', padding: '2rem' }}>
+  
+                    <div className="patient-summary" style={{ background: 'rgba(255,255,255,0.85)', border: '1.5px solid #cbd5e1', borderRadius: '30px', boxShadow: '0 15px 35px rgba(15, 45, 88, 0.08)', padding: '2rem', height: 'calc(100vh - 170px)', minHeight: 520, overflowY: 'auto' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                             <div>
                                 <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#1e293b' }}>{activePatient.name} <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 'normal' }}>• Real-Time Monitoring</span></h2>
@@ -482,14 +517,16 @@ export default function DoctorDashboard({ onLogout }) {
                         </div>
 
                         <div className="health-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
-                            <HealthCard title="Heart Rate" value={latest.hr} unit="BPM" severity={latest.status} icon="❤️" />
-                            <HealthCard title="Temperature" value={latest.temp} unit="°C" severity={latest.status} icon="🌡️" />
-                            <HealthCard title="SpO2" value={latest.spo2} unit="%" severity={latest.status} icon="💨" />
-                            <HealthCard title="Blood Pressure" value={latest.bp} unit="mmHg" severity={latest.status} icon="📊" />
+                            <HealthCard title="Heart Rate" value={latest.hr} unit="BPM" severity={latest.status} icon={<Activity className="w-10 h-10 text-red-500" />} />
+                            <HealthCard title="Temperature" value={latest.temp} unit="°C" severity={latest.status} icon={<Thermometer className="w-10 h-10 text-orange-400" />} />
+                            <HealthCard title="SpO2" value={latest.spo2} unit="%" severity={latest.status} icon={<Droplets className="w-10 h-10 text-blue-400" />} />
+                            <HealthCard title="Blood Pressure" value={latest.bp} unit="mmHg" severity={latest.status} icon={<BarChart3 className="w-10 h-10 text-emerald-500" />} />
                         </div>
 
-                        <div className="chart-area premium-card" style={{ padding: '1.5rem', marginTop: '1.5rem', background: '#ffffff', border: '1px solid rgba(121, 184, 255, 0.2)', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                            <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1rem', fontWeight: '700', marginBottom: '1.5rem' }}>📈 Live Vitals Monitor</h4>
+                        <div className="chart-area premium-card" style={{ padding: '1.5rem', marginTop: '1.5rem', background: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                            <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1rem', fontWeight: '700', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Activity className="w-4 h-4 text-blue-500" /> Live Vitals Monitor
+                            </h4>
                             <ResponsiveContainer width="100%" height={280}>
                                 <LineChart data={activePatient.vitals}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -506,19 +543,19 @@ export default function DoctorDashboard({ onLogout }) {
                         </div>
 
                         {scanResult && (
-                            <div className="ai-debate premium-card" style={{ background: '#fff', border: '1px solid rgba(121, 184, 255, 0.2)', borderRadius: '24px', padding: '1.5rem', marginTop: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                            <div className="ai-debate premium-card" style={{ background: '#fff', border: '1.5px solid #cbd5e1', borderRadius: '24px', padding: '1.5rem', marginTop: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                                 <h3 style={{ color: '#2f77d6', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', fontWeight: '800' }}>
-                                    <span>⚖️</span> Multi-Agent Clinical Consensus
+                                    <Scale className="w-5 h-5" /> Multi-Agent Clinical Consensus
                                 </h3>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '500px', overflowY: 'auto', paddingRight: '10px' }}>
                                     {[
-                                        { key: 'monitoring', icon: '📈', color: '#0ea5e9', label: 'Monitoring Agent', bg: '#f0f9ff', text: scanResult.debate?.monitoring_view },
-                                        { key: 'diagnosis', icon: '🩺', color: '#db2777', label: 'Diagnosis Agent', bg: '#fdf2f8', text: scanResult.debate?.diagnosis_view },
-                                        { key: 'debate', icon: '⚖️', color: '#1d4ed8', label: 'Debate Coordinator', bg: '#eff6ff', text: `Consensus reached (Disagreement score: ${scanResult.disagreement_score}/10)\n${scanResult.debate?.consensus || scanResult.consensus}` },
-                                        { key: 'explanation', icon: '🗣️', color: '#d97706', label: 'Explanation Agent', bg: '#fffbeb', text: scanResult.explanation?.voice_summary || scanResult.voice_summary },
-                                        { key: 'actions', icon: '⚡', color: '#16a34a', label: 'Action Agent', bg: '#f0fdf4', text: (scanResult.actions || []).map((a, i) => `${i + 1}. ${a}`).join('\n') },
-                                        { key: 'emergency', icon: '🚨', color: '#dc2626', label: 'Emergency Agent', bg: '#fef2f2', text: `Urgency: ${scanResult.emergency?.urgency_note}\nDispatch Alert: ${scanResult.emergency?.dispatch_alert ? 'YES ⚠️' : 'NO ✓'}` },
+                                        { key: 'monitoring', icon: <Activity className="w-5 h-5" />, color: '#0ea5e9', label: 'Monitoring Agent', bg: '#f0f9ff', text: scanResult.debate?.monitoring_view },
+                                        { key: 'diagnosis', icon: <Thermometer className="w-5 h-5" />, color: '#db2777', label: 'Diagnosis Agent', bg: '#fdf2f8', text: scanResult.debate?.diagnosis_view },
+                                        { key: 'debate', icon: <Scale className="w-5 h-5" />, color: '#1d4ed8', label: 'Debate Coordinator', bg: '#eff6ff', text: `Consensus reached (Disagreement score: ${scanResult.disagreement_score}/10)\n${scanResult.debate?.consensus || scanResult.consensus}` },
+                                        { key: 'explanation', icon: <MessageSquare className="w-5 h-5" />, color: '#d97706', label: 'Explanation Agent', bg: '#fffbeb', text: scanResult.explanation?.voice_summary || scanResult.voice_summary },
+                                        { key: 'actions', icon: <Sparkles className="w-5 h-5" />, color: '#16a34a', label: 'Action Agent', bg: '#f0fdf4', text: (scanResult.actions || []).map((a, i) => `${i + 1}. ${a}`).join('\n') },
+                                        { key: 'emergency', icon: <AlertTriangle className="w-5 h-5" />, color: '#dc2626', label: 'Emergency Agent', bg: '#fef2f2', text: `Urgency: ${scanResult.emergency?.urgency_note}\nDispatch Alert: ${scanResult.emergency?.dispatch_alert ? 'YES' : 'NO'}` },
                                     ].filter(item => item.text).map(item => (
                                         <div key={item.key} style={{ background: item.bg, padding: '1.25rem', borderRadius: '14px', borderLeft: `5px solid ${item.color}` }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.75rem' }}>
@@ -553,7 +590,7 @@ export default function DoctorDashboard({ onLogout }) {
                                         width: '100%',
                                         padding: '0.8rem 1rem',
                                         borderRadius: '10px',
-                                        border: '2px solid rgba(121, 184, 255, 0.3)',
+                                        border: '2px solid #cbd5e1',
                                         marginBottom: '0.75rem',
                                         fontSize: '15px',
                                         outline: 'none',
@@ -565,22 +602,23 @@ export default function DoctorDashboard({ onLogout }) {
                                     onBlur={(e) => e.target.style.borderColor = "rgba(121, 184, 255, 0.3)"}
                                     disabled={!!activeAlerts[activePatient.id]}
                                 />
-                                <ShinyButton
+                                <Button
                                     onClick={handleEmergencyAlert}
                                     disabled={!!activeAlerts[activePatient.id]}
-                                    variant={activeAlerts[activePatient.id] ? 'white' : 'pink'}
-                                    icon={<AlertTriangle className="w-4 h-4" />}
-                                    className={`w-full h-11 text-[11px] uppercase tracking-[0.08em] ${activeAlerts[activePatient.id] ? '' : 'text-red-600 hover:text-red-600'}`}
+                                    variant="outline"
+                                    className={`w-full h-11 text-[11px] uppercase tracking-[0.08em] font-black border-2 transition-all ${
+                                        activeAlerts[activePatient.id] 
+                                        ? 'border-blue-100 bg-blue-50/50 text-blue-400' 
+                                        : 'border-red-200 bg-white text-red-600 hover:bg-red-50 hover:border-red-300'
+                                    }`}
                                 >
+                                    <AlertTriangle className={`w-4 h-4 mr-2 ${activeAlerts[activePatient.id] ? 'text-blue-300' : 'text-red-500'}`} />
                                     {activeAlerts[activePatient.id] ? (
-                                        <>
-                                            <span style={{ animation: 'pulse 1.5s infinite' }}>⏳</span>
-                                            ADMIN RESPONSE PENDING...
-                                        </>
+                                        <>ADMIN RESPONSE PENDING...</>
                                     ) : (
-                                        <>🚨 Trigger Clinical Dispatch</>
+                                        <>Trigger Clinical Dispatch</>
                                     )}
-                                </ShinyButton>
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -638,7 +676,7 @@ export default function DoctorDashboard({ onLogout }) {
                     <Notification
                         message={notification.message}
                         type={notification.type}
-                        onClose={() => setNotification(null)}
+                        onClose={handleCloseNotification}
                     />
                 )}
             </AnimatePresence>

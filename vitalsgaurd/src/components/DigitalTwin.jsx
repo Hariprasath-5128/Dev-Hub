@@ -23,20 +23,30 @@ function EcgTrace({ scanData, color = '#38bdf8' }) {
   const [points, setPoints] = useState([]);
   const requestRef = useRef();
   const startTime = useRef(Date.now());
-  const bpm = scanData?.vitals?.heart_rate || 72;
-  const frequency = bpm / 60;
+  const bpmRef = useRef(scanData?.vitals?.heart_rate || 72);
+
+  // Sync ref with live props for the animation loop
+  useEffect(() => {
+    bpmRef.current = scanData?.vitals?.heart_rate || 72;
+  }, [scanData?.vitals?.heart_rate]);
 
   const animate = () => {
     const elapsed = (Date.now() - startTime.current) / 1000;
+    const frequency = bpmRef.current / 60;
     const newPoints = [];
-    for (let x = 0; x <= 200; x += 2) {
-      const timeOffset = elapsed - (x / 200) * 2;
+    
+    // Using 300 points for a wider, more detailed graph
+    for (let x = 0; x <= 300; x += 2) {
+      const timeOffset = elapsed - (x / 300) * 2;
       let y = 0;
       const phase = (timeOffset * frequency) % 1;
-      if (phase < 0.1) y = Math.sin(phase * Math.PI * 10) * 5;
-      else if (phase > 0.12 && phase < 0.16) y = (phase - 0.14) * 200;
-      else if (phase >= 0.16 && phase < 0.2) y = (0.18 - phase) * 200;
-      else if (phase > 0.25 && phase < 0.45) y = Math.sin((phase - 0.25) * Math.PI * 5) * 8;
+      
+      // Clinical-style waveform with calibrated peaks for high visibility
+      if (phase < 0.1) y = Math.sin(phase * Math.PI * 10) * 20; // P-wave
+      else if (phase > 0.12 && phase < 0.16) y = (phase - 0.14) * 850; // QRS complex
+      else if (phase >= 0.16 && phase < 0.2) y = (0.18 - phase) * 850;
+      else if (phase > 0.25 && phase < 0.45) y = Math.sin((phase - 0.25) * Math.PI * 5) * 40; // T-wave
+      
       newPoints.push(`${x},${50 - y}`);
     }
     setPoints(newPoints);
@@ -46,15 +56,65 @@ function EcgTrace({ scanData, color = '#38bdf8' }) {
   useEffect(() => {
     requestRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [bpm]);
+  }, []); // Only run once on mount
 
   return (
-    <div style={{ position: 'absolute', bottom: 15, right: 15, width: 200, height: 60, background: 'rgba(2,6,23,0.4)', backdropFilter: 'blur(4px)', borderRadius: 8, padding: 10, border: `1px solid ${color}22`, overflow: 'hidden', pointerEvents: 'none' }}>
-      <div style={{ fontSize: '0.65rem', color, textTransform: 'uppercase', marginBottom: 4, opacity: 0.8, letterSpacing: 1 }}>Live ECG Track</div>
-      <svg width="200" height="40" viewBox="0 0 200 100" style={{ overflow: 'visible' }}>
-        <polyline fill="none" stroke={color} strokeWidth="2.5" points={points.join(' ')} strokeLinejoin="round" />
-        <polyline fill="none" stroke={color} strokeWidth="6" points={points.join(' ')} strokeLinejoin="round" opacity="0.2" />
-      </svg>
+    <div style={{ 
+      position: 'absolute', 
+      bottom: 15, 
+      right: 15, 
+      width: 320, 
+      height: 120, 
+      background: 'radial-gradient(circle at center, #0a192f 0%, #020617 100%)', 
+      backdropFilter: 'blur(12px)', 
+      borderRadius: 16, 
+      padding: 12, 
+      border: `1px solid ${color}44`, 
+      overflow: 'hidden', 
+      pointerEvents: 'none', 
+      boxShadow: `0 0 30px ${color}22, inset 0 0 20px ${color}11`, 
+      display: 'flex', 
+      flexDirection: 'column' 
+    }}>
+      {/* Mesh Overlay Background */}
+      <div style={{ 
+        position: 'absolute', 
+        inset: 0, 
+        opacity: 0.15, 
+        backgroundImage: `linear-gradient(${color} 1px, transparent 1px), linear-gradient(90deg, ${color} 1px, transparent 1px)`,
+        backgroundSize: '20px 20px',
+        zIndex: 0
+      }} />
+      
+      <div style={{ 
+        position: 'relative', 
+        zIndex: 1, 
+        fontSize: '0.75rem', 
+        color, 
+        textTransform: 'uppercase', 
+        marginBottom: 8, 
+        opacity: 1, 
+        letterSpacing: 2, 
+        fontWeight: '900', 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        textShadow: `0 0 10px ${color}`
+      }}>
+        <span>Live ECG Track</span>
+        <span style={{ fontSize: '0.85rem', background: `${color}22`, padding: '2px 8px', borderRadius: '6px', border: `1px solid ${color}33` }}>
+          {status} {Math.round(scanData?.vitals?.heart_rate || 0)} BPM
+        </span>
+      </div>
+      
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', position: 'relative', zIndex: 1 }}>
+        <svg width="290" height="70" viewBox="0 0 300 100" preserveAspectRatio="none" style={{ overflow: 'visible', filter: `drop-shadow(0 0 5px ${color})` }}>
+          {/* Neon Glow Layers */}
+          <polyline fill="none" stroke={color} strokeWidth="5" points={points.join(' ')} strokeLinejoin="round" opacity="0.1" />
+          <polyline fill="none" stroke={color} strokeWidth="3" points={points.join(' ')} strokeLinejoin="round" opacity="0.3" />
+          <polyline fill="none" stroke="#fff" strokeWidth="1.5" points={points.join(' ')} strokeLinejoin="round" />
+        </svg>
+      </div>
     </div>
   );
 }
@@ -205,7 +265,7 @@ function HumanModel({ scanData, isScanning }) {
 
 // ── Root export ───────────────────────────────────────────────────────────────
 export default function DigitalTwin({ scanData, isScanning }) {
-  const accentColor = scanData?.heatmap_colour || '#38bdf8';
+  const accentColor = '#3b82f6'; // Professional Institutional Blue
 
   return (
     <div style={{ width: '100%', height: 520, position: 'relative', overflow: 'hidden', background: 'radial-gradient(ellipse at center, #070e1b 0%, #01040a 100%)', borderRadius: 20, border: '1px solid rgba(56,189,248,0.1)' }}>
