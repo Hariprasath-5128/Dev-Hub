@@ -12,6 +12,10 @@ RUN npm install
 
 # Copy source and build
 COPY vitalsgaurd/ ./
+# Fix hardcoded localhost URLs for production deployment without changing source code in repo
+RUN find src/components -type f -name "*.jsx" -exec sed -i 's|http://localhost:5000/api|/api|g' {} + && \
+    find src/components -type f -name "*.jsx" -exec sed -i 's|http://localhost:8000/api|/api|g' {} + && \
+    find src/components -type f -name "*.jsx" -exec sed -i 's|http://localhost:5003||g' {} +
 RUN npm run build
 
 # ── Stage 2: Runtime image ────────────────────────────────────────────────────
