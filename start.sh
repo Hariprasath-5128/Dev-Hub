@@ -12,6 +12,9 @@ export PYTHONUNBUFFERED=1
 mkdir -p /app/vitalsgaurd/backend/logs
 mkdir -p /app/vitalsgaurd/server/logs
 
+echo "🔍 Debug: Python environment check"
+pip list | grep -E "mistral|phi|fastapi"
+
 # ── 1. Node Backend (Port 5003) ───────────────────────────────────────────────
 echo "🟢 Starting Node Backend..."
 cd /app/vitalsgaurd/server
