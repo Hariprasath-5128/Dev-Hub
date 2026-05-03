@@ -1,5 +1,5 @@
 # VitalsGuard AI — Hugging Face Spaces
-# Strategy: Multi-stage build, Node 20, no TensorFlow (too large for HF free tier)
+# Strategy: Multi-stage build, Node 20, includes tensorflow-cpu for Model 03
 
 # ── Stage 1: Build React/Vite frontend ───────────────────────────────────────
 FROM node:20-slim AS frontend-build
@@ -35,7 +35,7 @@ COPY . .
 # Bring in the compiled frontend from Stage 1
 COPY --from=frontend-build /app/vitalsgaurd/dist /app/vitalsgaurd/dist
 
-# ── Python dependencies (no TensorFlow — too large for free-tier build) ───────
+# ── Python dependencies (includes tensorflow-cpu for Model 03) ───────
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r vitalsgaurd/backend/requirements-deploy.txt
 
