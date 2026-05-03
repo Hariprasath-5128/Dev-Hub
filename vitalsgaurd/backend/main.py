@@ -78,6 +78,10 @@ app.add_middleware(
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
+@app.get("/")
+async def root():
+    return {"message": "VitalsGuard AI Agent Backend is running"}
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "service": "VitalsGuard AI Backend"}

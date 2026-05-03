@@ -7,8 +7,13 @@ const axios = require("axios");
 const supabase = require("./supabase");
 
 const app = express();
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
+
+// Root route for health check
+app.get('/', (req, res) => {
+  res.json({ message: 'VitalsGuard Node API is running' });
+});
 
 const APPOINTMENT_DURATION_MINUTES = 20;
 const WORK_DAY_START_HOUR = 9;
