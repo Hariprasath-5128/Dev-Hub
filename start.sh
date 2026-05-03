@@ -15,7 +15,7 @@ mkdir -p /app/vitalsgaurd/server/logs
 # ── 1. Node Backend (Port 5003) ───────────────────────────────────────────────
 echo "🟢 Starting Node Backend..."
 cd /app/vitalsgaurd/server
-node server.js > /app/vitalsgaurd/server/logs/server.log 2>&1 &
+node server.js &
 NODE_PID=$!
 sleep 3
 echo "✅ Node Backend started (PID: $NODE_PID)"
@@ -23,7 +23,7 @@ echo "✅ Node Backend started (PID: $NODE_PID)"
 # ── 2. FastAPI Backend (Port 8000) ────────────────────────────────────────────
 echo "🟢 Starting FastAPI Backend..."
 cd /app/vitalsgaurd/backend
-uvicorn main:app --host 0.0.0.0 --port 8000 > /app/vitalsgaurd/backend/logs/fastapi.log 2>&1 &
+uvicorn main:app --host 0.0.0.0 --port 8000 &
 FASTAPI_PID=$!
 sleep 5
 echo "✅ FastAPI Backend started (PID: $FASTAPI_PID)"
@@ -31,7 +31,7 @@ echo "✅ FastAPI Backend started (PID: $FASTAPI_PID)"
 # ── 3. ML Prediction Engine (Port 5000) ───────────────────────────────────────
 echo "🟢 Starting Flask ML Engine..."
 cd /app/base_models
-python app.py > /app/vitalsgaurd/backend/logs/flask.log 2>&1 &
+python app.py &
 FLASK_PID=$!
 sleep 5
 echo "✅ Flask ML Engine started (PID: $FLASK_PID)"
