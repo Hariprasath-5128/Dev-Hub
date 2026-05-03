@@ -12,4 +12,6 @@ flask
 flask-cors
 xgboost
 joblib
+tensorflow-cpu
+
 

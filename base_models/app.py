@@ -40,6 +40,19 @@ try:
 except Exception as e:
     print(f"❌ Error loading Model 01: {e}")
     model1, le1, feature_cols1 = None, None, None
+    print(f"❌ Error loading Model 01: {e}")
+
+@app.route("/health", methods=["GET"])
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "models": {
+            "model_01": model1 is not None,
+            "model_03": trend_loaded,
+            "model_07": what_if_loaded
+        },
+        "python_version": sys.version
+    })
 
 @app.route("/api/predict/disease", methods=["POST"])
 def predict_disease():
