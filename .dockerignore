@@ -1,17 +1,30 @@
-node_modules
+# Git
 .git
-.venv
+.gitignore
+
+# Node
+node_modules
+.npm-cache
+
+# Python
 venv
+.venv
 __pycache__
-.pytest_cache
-*.log
-.env
-dist
-build
-.DS_Store
-.vscode
-.idea
 *.pyc
 *.pyo
-.gitignore
-README.md
+.pytest_cache
+
+# Build artifacts (frontend is built inside Docker)
+vitalsgaurd/dist
+build
+
+# Logs
+*.log
+
+# IDE
+.vscode
+.idea
+.DS_Store
+
+# Env files (secrets are set via HF Space secrets)
+.env
