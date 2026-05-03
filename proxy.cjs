@@ -4,14 +4,18 @@ const path = require('path');
 
 const app = express();
 
+// Simple logging middleware to see traffic in Hugging Face logs
+app.use((req, res, next) => {
+  console.log(`[Proxy] ${req.method} ${req.url}`);
+  next();
+});
+
 // 1. Serve the built Vite frontend static files
-// This is located at vitalsgaurd/dist after build
 app.use(express.static(path.join(__dirname, 'vitalsgaurd/dist')));
 
 // 2. ML Prediction Routes → Flask (port 5000)
-// Handles Model 01, 03, 07 and Integrated Analysis
 app.use(['/api/predict', '/api/explain-trend', '/api/integrated', '/health'], createProxyMiddleware({
-  target: 'http://127.0.0.1:5000',
+  target: 'http://localhost:5000',
   changeOrigin: true,
   on: { 
     error: (err, req, res) => {
@@ -22,9 +26,8 @@ app.use(['/api/predict', '/api/explain-trend', '/api/integrated', '/health'], cr
 }));
 
 // 3. Agentic / Other API Routes → FastAPI (port 8000)
-// Handles Phidata agents and analyze-vitals
 app.use('/api', createProxyMiddleware({
-  target: 'http://127.0.0.1:8000',
+  target: 'http://localhost:8000',
   changeOrigin: true,
   on: { 
     error: (err, req, res) => {
@@ -35,10 +38,9 @@ app.use('/api', createProxyMiddleware({
 }));
 
 // 4. Auth + Node routes → Node backend (port 5003)
-// Handles Supabase, Appointments, Alerts
 app.use(['/auth', '/store-report', '/appointments', '/alerts'],
   createProxyMiddleware({
-    target: 'http://127.0.0.1:5003',
+    target: 'http://localhost:5003',
     changeOrigin: true,
     on: { 
       error: (err, req, res) => {
