@@ -37,54 +37,7 @@ sleep 5
 echo "✅ Flask ML Engine started (PID: $FLASK_PID)"
 
 # ── 4. Proxy + Static Frontend (Port 7860) ────────────────────────────────────
-# IMPORTANT: proxy.cjs lives at /app/ (not inside /app/vitalsgaurd/)
-# because vitalsgaurd/package.json has "type":"module" which breaks require()
 echo "🟢 Starting Frontend proxy..."
-
-cat > /app/proxy.cjs << 'PROXYEOF'
-const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
-const path = require('path');
-
-const app = express();
-
-// Serve the built Vite frontend
-app.use(express.static(path.join(__dirname, 'vitalsgaurd/dist')));
-
-// ML Prediction Routes → Flask (port 5000)
-app.use(['/api/predict', '/api/explain-trend', '/api/integrated'], createProxyMiddleware({
-  target: 'http://localhost:5000',
-  changeOrigin: true,
-  on: { error: (err, req, res) => res.status(502).json({ error: 'ML Engine unavailable' }) }
-}));
-
-// Agentic / Other API Routes → FastAPI (port 8000)
-app.use('/api', createProxyMiddleware({
-  target: 'http://localhost:8000',
-  changeOrigin: true,
-  on: { error: (err, req, res) => res.status(502).json({ error: 'FastAPI unavailable' }) }
-}));
-
-// Auth + Node routes → Node backend (port 5003)
-app.use(['/auth', '/store-report', '/appointments', '/alerts', '/health'],
-  createProxyMiddleware({
-    target: 'http://localhost:5003',
-    changeOrigin: true,
-    on: { error: (err, req, res) => res.status(502).json({ error: 'Node backend unavailable' }) }
-  })
-);
-
-// SPA fallback
-app.use((req, res) => {
-  res.sendFile(path.join(__dirname, 'vitalsgaurd/dist/index.html'));
-});
-
-const PORT = process.env.PORT || 7860;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('🚀 VitalsGuard proxy running on http://0.0.0.0:' + PORT);
-});
-PROXYEOF
-
 cd /app
 node proxy.cjs &
 PROXY_PID=$!
