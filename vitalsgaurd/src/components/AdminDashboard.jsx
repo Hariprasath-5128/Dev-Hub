@@ -156,7 +156,7 @@ export default function AdminDashboard({ onLogout }) {
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
-        const res = await fetch('http://localhost:5003/alerts');
+        const res = await fetch('/alerts');
         const data = await res.json();
         if (data.success) {
           // Check for new alerts to show toast
@@ -184,7 +184,7 @@ export default function AdminDashboard({ onLogout }) {
     setAcknowledgingIds(prev => [...prev, alertId]);
     
     try {
-      const res = await fetch(`http://localhost:5003/alerts/${alertId}/respond`, {
+      const res = await fetch(`/alerts/${alertId}/respond`, {
         method: 'PATCH'
       });
       const data = await res.json();

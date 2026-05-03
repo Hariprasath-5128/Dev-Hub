@@ -6,7 +6,8 @@ import {
 } from 'recharts';
 import './IntegratedHealthAnalyzer.css';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = '/api';
+const AI_API_BASE = '/api';
 
 // Color scheme
 const COLORS = {

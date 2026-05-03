@@ -10,8 +10,8 @@ import { AlertTriangle, Sparkles, UserMinus, Activity, Thermometer, Droplets, Ba
 import { patients as initialPatients } from '../data/mockVitals';
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:5003';
-const AI_API_BASE = 'http://localhost:8000/api';
+const API_BASE = '';
+const AI_API_BASE = '/api';
 
 function ElegantShape({
     delay = 0,

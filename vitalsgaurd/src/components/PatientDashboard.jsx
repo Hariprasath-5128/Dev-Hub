@@ -10,8 +10,8 @@ import DigitalTwin from './DigitalTwin';
 import M1 from './m1';
 import { Button } from './ui/button';
 
-const API_BASES = ['http://localhost:5000/api', 'http://localhost:8000/api'];
-const NODE_API_BASE = 'http://localhost:5003';
+const API_BASES = ['/api', '/api'];
+const NODE_API_BASE = '';
 
 function hexToRgb(hex) {
   const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec((hex || "").trim());
@@ -608,7 +608,7 @@ export default function PatientDashboard({ userId, onLogout }) {
       const fetchExplanation = async () => {
         setExplaining(true);
         try {
-          const res = await axios.post('http://localhost:5000/api/explain-trend', { trend: trendResult.trend, confidence: trendResult.confidence, vitals: vitalsHistory[vitalsHistory.length - 1] });
+          const res = await axios.post('/api/explain-trend', { trend: trendResult.trend, confidence: trendResult.confidence, vitals: vitalsHistory[vitalsHistory.length - 1] });
           setTrendExplanation(res.data.explanation);
         } catch (err) { setTrendExplanation(`Vitals show a ${trendResult.trend.toLowerCase()} pattern.`); }
         finally { setExplaining(false); }
@@ -749,8 +749,8 @@ export default function PatientDashboard({ userId, onLogout }) {
     };
 
     const endpoints = [
-      'http://localhost:5000/api/analyze-vitals',
-      'http://localhost:8000/api/analyze-vitals'
+      '/api/analyze-vitals',
+      '/api/analyze-vitals'
     ];
 
     let lastError = 'Agent-debate service is currently unavailable.';

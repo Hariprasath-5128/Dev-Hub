@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import DigitalTwin from './DigitalTwin';
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = '/api';
 
 export default function TargetedScan() {
   const [hr, setHr] = useState(75);
@@ -26,7 +26,7 @@ export default function TargetedScan() {
 
       // Hitting the Node Auth Server. The node server proxies the request to Python
       // and securely logs the result into the 'medical_reports' Supabase table.
-      const response = await axios.post('http://localhost:5003/store-report', {
+      const response = await axios.post('/store-report', {
         userId,
         scanType: 'Targeted Scan',
         heartRate: hr,

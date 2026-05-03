@@ -292,7 +292,7 @@ export default function Login({ onLogin }) {
     setIsLoading(true);
 
     try {
-      const res = await axios.post("http://localhost:5003/auth", {
+      const res = await axios.post("/auth", {
         username: username.toLowerCase(),
         password,
         action,
