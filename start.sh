@@ -60,7 +60,7 @@ app.use(['/auth', '/store-report', '/appointments', '/alerts', '/health'],
 );
 
 // SPA fallback
-app.get('*', (req, res) => {
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'vitalsgaurd/dist/index.html'));
 });
 
