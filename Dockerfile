@@ -8,7 +8,7 @@ WORKDIR /app/vitalsgaurd
 
 # Install deps first (better layer caching)
 COPY vitalsgaurd/package.json vitalsgaurd/package-lock.json ./
-RUN npm ci
+RUN npm install
 
 # Copy source and build
 COPY vitalsgaurd/ ./
