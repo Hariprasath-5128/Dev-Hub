@@ -6,7 +6,11 @@ const app = express();
 
 // Simple logging middleware to see traffic in Hugging Face logs
 app.use((req, res, next) => {
-  console.log(`[Proxy] ${req.method} ${req.url}`);
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[Proxy] ${req.method} ${req.url} ${res.statusCode} (${duration}ms)`);
+  });
   next();
 });
 
