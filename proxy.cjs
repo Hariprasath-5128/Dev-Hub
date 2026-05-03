@@ -18,7 +18,8 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'vitalsgaurd/dist')));
 
 // 2. ML Prediction Routes → Flask (port 5000)
-app.use(['/api/predict', '/api/explain-trend', '/api/integrated', '/health'], createProxyMiddleware({
+app.use(createProxyMiddleware({
+  pathFilter: ['/api/predict', '/api/explain-trend', '/api/integrated', '/health'],
   target: 'http://localhost:5000',
   changeOrigin: true,
   on: { 
@@ -30,7 +31,8 @@ app.use(['/api/predict', '/api/explain-trend', '/api/integrated', '/health'], cr
 }));
 
 // 3. Agentic / Other API Routes → FastAPI (port 8000)
-app.use('/api', createProxyMiddleware({
+app.use(createProxyMiddleware({
+  pathFilter: (path) => path.startsWith('/api') && !path.startsWith('/api/predict'),
   target: 'http://localhost:8000',
   changeOrigin: true,
   on: { 
@@ -42,18 +44,17 @@ app.use('/api', createProxyMiddleware({
 }));
 
 // 4. Auth + Node routes → Node backend (port 5003)
-app.use(['/auth', '/store-report', '/appointments', '/alerts'],
-  createProxyMiddleware({
-    target: 'http://localhost:5003',
-    changeOrigin: true,
-    on: { 
-      error: (err, req, res) => {
-        console.error('Node Backend Proxy Error:', err);
-        res.status(502).json({ error: 'Node backend unavailable' });
-      }
+app.use(createProxyMiddleware({
+  pathFilter: ['/auth', '/store-report', '/appointments', '/alerts'],
+  target: 'http://localhost:5003',
+  changeOrigin: true,
+  on: { 
+    error: (err, req, res) => {
+      console.error('Node Backend Proxy Error:', err);
+      res.status(502).json({ error: 'Node backend unavailable' });
     }
-  })
-);
+  }
+}));
 
 // 5. SPA Fallback
 // If no route matches, serve index.html (important for React Router)
