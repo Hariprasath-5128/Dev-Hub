@@ -13,6 +13,6 @@ flask-cors
 xgboost
 joblib
 tensorflow-cpu
-mistralai==1.1.0
+mistralai==1.11.1
 
 
