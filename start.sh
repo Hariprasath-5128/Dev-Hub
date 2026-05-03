@@ -14,6 +14,7 @@ mkdir -p /app/vitalsgaurd/server/logs
 
 echo "🔍 Debug: Python environment check"
 pip list | grep -E "mistral|phi|fastapi"
+python -c "import mistralai; print(f'📦 Mistral Path: {mistralai.__file__}')" || echo "❌ Mistral import failed in debug"
 
 # ── 1. Node Backend (Port 5003) ───────────────────────────────────────────────
 echo "🟢 Starting Node Backend..."
