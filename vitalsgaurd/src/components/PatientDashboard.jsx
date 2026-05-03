@@ -1026,7 +1026,7 @@ export default function PatientDashboard({ userId, onLogout }) {
         />
       </div>
 
-      <header style={{ position: "relative", zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.2rem 2.5rem', background: 'rgba(255, 255, 255, 0.95)', borderBottom: '1px solid rgba(247,167,192,0.2)', position: 'sticky', top: 0 }}>
+      <header style={{ zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.2rem 2.5rem', background: 'rgba(255, 255, 255, 0.95)', borderBottom: '1px solid rgba(247,167,192,0.2)', position: 'sticky', top: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg, #fbcfe8, #ffe4e9)', display: 'grid', placeItems: 'center', boxShadow: '0 8px 16px rgba(251,207,232,0.3)' }}>
             <HeartPulse color="#e11d48" size={24} />

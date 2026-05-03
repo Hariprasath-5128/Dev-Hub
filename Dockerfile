@@ -13,9 +13,12 @@ RUN npm install
 # Copy source and build
 COPY vitalsgaurd/ ./
 # Fix hardcoded localhost URLs for production deployment without changing source code in repo
-RUN find src -type f \( -name "*.jsx" -o -name "*.js" -o -name "*.tsx" -o -name "*.ts" \) -exec sed -i 's|http://localhost:5000/api|/api|g' {} + && \
-    find src -type f \( -name "*.jsx" -o -name "*.js" -o -name "*.tsx" -o -name "*.ts" \) -exec sed -i 's|http://localhost:8000/api|/api|g' {} + && \
-    find src -type f \( -name "*.jsx" -o -name "*.js" -o -name "*.tsx" -o -name "*.ts" \) -exec sed -i 's|http://localhost:5003||g' {} +
+RUN find src -type f -name "*.js*" -exec sed -i 's|http://localhost:5000/api|/api|g' {} + && \
+    find src -type f -name "*.js*" -exec sed -i 's|http://localhost:8000/api|/api|g' {} + && \
+    find src -type f -name "*.js*" -exec sed -i 's|http://localhost:5003||g' {} + && \
+    find src -type f -name "*.ts*" -exec sed -i 's|http://localhost:5000/api|/api|g' {} + && \
+    find src -type f -name "*.ts*" -exec sed -i 's|http://localhost:8000/api|/api|g' {} + && \
+    find src -type f -name "*.ts*" -exec sed -i 's|http://localhost:5003||g' {} +
 RUN npm run build
 
 # ── Stage 2: Runtime image ────────────────────────────────────────────────────

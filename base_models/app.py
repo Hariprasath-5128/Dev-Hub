@@ -208,5 +208,36 @@ def explain_trend_route():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/integrated/analysis', methods=['POST'])
+def integrated_analysis():
+    try:
+        data = request.json
+        if not data: return jsonify({"error": "No JSON payload"}), 400
+        
+        # Current Diagnosis
+        res_01 = {}
+        if model1:
+            features = [float(data.get(col, 0)) for col in feature_cols1]
+            probs = model1.predict_proba(np.array([features]))[0]
+            p_idx = np.argmax(probs)
+            res_01 = {
+                "predicted_condition": le1.inverse_transform([p_idx])[0],
+                "confidence": round(float(probs[p_idx]), 4)
+            }
+            
+        # What-If (Model 07)
+        res_07 = {}
+        if what_if_loaded:
+            res_07 = simulate_whatif(data)
+            
+        return jsonify({
+            "status": "success",
+            "model01": res_01,
+            "model07": res_07,
+            "overall_risk_level": "moderate" if (res_01.get("confidence", 0) > 0.4) else "low"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
