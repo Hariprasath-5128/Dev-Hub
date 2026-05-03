@@ -1,0 +1,16 @@
+# VitalsGuard Startup Commands
+
+# 1. Frontend (Vite + React)
+# Directory: C:\Projects\Dev-Hub\vitalsgaurd
+cd C:\Projects\Dev-Hub\vitalsgaurd
+npm run dev
+
+# 2. Node Backend (DB / Auth - Port 5003)
+# Directory: C:\Projects\Dev-Hub\vitalsgaurd\server
+cd C:\Projects\Dev-Hub\vitalsgaurd\server
+node server.js
+
+# 3. AI Agent Backend (FastAPI - Port 8000)
+# Directory: C:\Projects\Dev-Hub\vitalsgaurd\backend
+cd C:\Projects\Dev-Hub\vitalsgaurd\backend
+uvicorn main:app --port 8000 --reload

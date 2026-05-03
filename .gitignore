@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+venv/
+env/
+.venv/
+.npm-cache/
+
+# Build
+dist/
+build/
+.next/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Misc
+.env
+.DS_Store

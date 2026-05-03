@@ -1,0 +1,85 @@
+﻿
+> vitalsguard-ai@0.1.0 build
+> vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+node.exe : [31mx[39m Build 
+failed in 766ms
+At C:\Program 
+Files\nodejs\npm.ps1:29 
+char:3
++   & $NODE_EXE $NPM_CLI_JS 
+$args
++   
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: ([31mx  
+  [39m Build failed in 766   
+ ms:String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+[31merror during build:
+[31m[vite:esbuild] 
+Transform failed with 1 
+error:
+C:/Users/moham/Projects/Dev-H
+ub/vitalsgaurd/src/components
+/DigitalTwin.jsx:73:12: 
+ERROR: Unexpected closing 
+"motion.div" tag does not 
+match opening "svg" tag[31m
+file: [36mC:/Users/moham/Pro
+jects/Dev-Hub/vitalsgaurd/src
+/components/DigitalTwin.jsx:7
+3:12[31m
+[33m
+[33mUnexpected closing 
+"motion.div" tag does not 
+match opening "svg" tag[33m
+71 |                />
+72 |              )}
+73 |            </motion.div>
+   |              ^
+74 |  
+75 |            {/* Leader 
+Line and Label */}
+[31m
+    at failureErrorWithLog (C
+:\Users\moham\Projects\Dev-Hu
+b\vitalsgaurd\node_modules\es
+build\lib\main.js:1472:15)
+    at C:\Users\moham\Project
+s\Dev-Hub\vitalsgaurd\node_mo
+dules\esbuild\lib\main.js:755
+:50
+    at 
+responseCallbacks.<computed> 
+(C:\Users\moham\Projects\Dev-
+Hub\vitalsgaurd\node_modules\
+esbuild\lib\main.js:622:9)
+    at handleIncomingPacket (
+C:\Users\moham\Projects\Dev-H
+ub\vitalsgaurd\node_modules\e
+sbuild\lib\main.js:677:12)
+    at Socket.readFromStdout 
+(C:\Users\moham\Projects\Dev-
+Hub\vitalsgaurd\node_modules\
+esbuild\lib\main.js:600:7)
+    at Socket.emit 
+(node:events:518:28)
+    at addChunk (node:interna
+l/streams/readable:561:12)
+    at 
+readableAddChunkPushByteMode 
+(node:internal/streams/readab
+le:512:3)
+    at Readable.push (node:in
+ternal/streams/readable:392:5
+)
+    at Pipe.onStreamRead (nod
+e:internal/stream_base_common
+s:189:23)[39m
+[32mΓ£ô[39m 30 modules transformed.
