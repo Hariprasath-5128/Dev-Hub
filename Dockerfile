@@ -7,7 +7,7 @@ FROM node:20-slim AS frontend-build
 WORKDIR /app/vitalsgaurd
 
 # Install deps first (better layer caching)
-COPY vitalsgaurd/package.json vitalsgaurd/package-lock.json ./
+COPY vitalsgaurd/package.json ./
 RUN npm install
 
 # Copy source and build
