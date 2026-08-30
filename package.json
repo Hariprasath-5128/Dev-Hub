@@ -1,0 +1,26 @@
+{
+  "name": "dev-hub",
+  "version": "1.0.0",
+  "description": "---\r title: VitalsGuard AI\r emoji: 🏥\r colorFrom: blue\r colorTo: green\r sdk: docker\r app_port: 7860\r pinned: false\r ---",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hariprasath-5128/Dev-Hub.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Hariprasath-5128/Dev-Hub/issues"
+  },
+  "homepage": "https://github.com/Hariprasath-5128/Dev-Hub#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.7",
+    "playwright": "^1.62.1"
+  }
+}

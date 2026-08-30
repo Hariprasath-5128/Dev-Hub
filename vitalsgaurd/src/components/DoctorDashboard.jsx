@@ -9,6 +9,7 @@ import { Button, ShinyButton } from './ui/button';
 import { AlertTriangle, Sparkles, UserMinus, Activity, Thermometer, Droplets, BarChart3, Building2, Scale, MessageSquare, CheckCircle2 } from 'lucide-react';
 import { patients as initialPatients } from '../data/mockVitals';
 import axios from 'axios';
+import ChatWidget from './ChatWidget';
 
 const API_BASE = '';
 const AI_API_BASE = '/api';
@@ -133,7 +134,7 @@ function Notification({ message, type = 'success', onClose }) {
     );
 }
 
-export default function DoctorDashboard({ onLogout }) {
+export default function DoctorDashboard({ onLogout, hasToken = false }) {
     const [patientsList, setPatientsList] = useState(initialPatients);
     const [activePatientId, setActivePatientId] = useState(initialPatients[0]?.id);
     const [mode, setMode] = useState('normal');
@@ -425,7 +426,7 @@ export default function DoctorDashboard({ onLogout }) {
                 </div>
 
                 <section className="doctor-top-row" style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 1.5rem 1.5rem' }}>
-                    <div className="patient-list premium-card" style={{ background: 'rgba(255,255,255,0.88)', border: '1.5px solid #cbd5e1', borderRadius: '22px', boxShadow: '0 10px 30px rgba(23,59,103,0.06)', height: 'calc(100vh - 170px)', minHeight: 520, display: 'flex', flexDirection: 'column' }}>
+                    <div className="patient-list premium-card" style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.85) 0%, rgba(207,229,255,0.6) 55%, rgba(225,214,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', border: '1px solid rgba(121,184,255,0.25)', borderRadius: '22px', boxShadow: '0 10px 30px rgba(23,59,103,0.06)', height: 'calc(100vh - 170px)', minHeight: 520, display: 'flex', flexDirection: 'column' }}>
                         <h2 style={{ color: '#2f77d6', marginBottom: '1rem', fontSize: '1.05rem', fontWeight: '800' }}>In-Patient Assignments</h2>
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingRight: '6px', paddingBottom: '110px', scrollBehavior: 'smooth', scrollbarGutter: 'stable' }}>
                             {[...patientsList]
@@ -490,7 +491,7 @@ export default function DoctorDashboard({ onLogout }) {
                         </ul>
                     </div>
   
-                    <div className="patient-summary" style={{ background: 'rgba(255,255,255,0.85)', border: '1.5px solid #cbd5e1', borderRadius: '30px', boxShadow: '0 15px 35px rgba(15, 45, 88, 0.08)', padding: '2rem', height: 'calc(100vh - 170px)', minHeight: 520, overflowY: 'auto' }}>
+                    <div className="patient-summary" style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.82) 0%, rgba(207,229,255,0.55) 55%, rgba(225,214,255,0.45) 100%)', backdropFilter: 'blur(32px) saturate(160%)', WebkitBackdropFilter: 'blur(32px) saturate(160%)', border: '1px solid rgba(121,184,255,0.25)', borderRadius: '30px', boxShadow: '0 15px 45px rgba(15, 45, 88, 0.08)', padding: '2rem', height: 'calc(100vh - 170px)', minHeight: 520, overflowY: 'auto' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                             <div>
                                 <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#1e293b' }}>{activePatient.name} <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 'normal' }}>• Real-Time Monitoring</span></h2>
@@ -523,7 +524,7 @@ export default function DoctorDashboard({ onLogout }) {
                             <HealthCard title="Blood Pressure" value={latest.bp} unit="mmHg" severity={latest.status} icon={<BarChart3 className="w-10 h-10 text-emerald-500" />} />
                         </div>
 
-                        <div className="chart-area premium-card" style={{ padding: '1.5rem', marginTop: '1.5rem', background: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                        <div className="chart-area premium-card" style={{ padding: '1.5rem', marginTop: '1.5rem', background: 'linear-gradient(150deg, rgba(255,255,255,0.85) 0%, rgba(207,229,255,0.6) 55%, rgba(225,214,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', border: '1px solid rgba(121,184,255,0.25)', borderRadius: '24px', boxShadow: '0 10px 40px rgba(23,59,103,0.06)' }}>
                             <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1rem', fontWeight: '700', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Activity className="w-4 h-4 text-blue-500" /> Live Vitals Monitor
                             </h4>
@@ -543,7 +544,7 @@ export default function DoctorDashboard({ onLogout }) {
                         </div>
 
                         {scanResult && (
-                            <div className="ai-debate premium-card" style={{ background: '#fff', border: '1.5px solid #cbd5e1', borderRadius: '24px', padding: '1.5rem', marginTop: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                            <div className="ai-debate premium-card" style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.85) 0%, rgba(207,229,255,0.6) 55%, rgba(225,214,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', border: '1px solid rgba(121,184,255,0.25)', borderRadius: '24px', padding: '1.5rem', marginTop: '1.5rem', boxShadow: '0 10px 40px rgba(23,59,103,0.06)' }}>
                                 <h3 style={{ color: '#2f77d6', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', fontWeight: '800' }}>
                                     <Scale className="w-5 h-5" /> Multi-Agent Clinical Consensus
                                 </h3>
@@ -680,6 +681,12 @@ export default function DoctorDashboard({ onLogout }) {
                     />
                 )}
             </AnimatePresence>
+
+            <ChatWidget
+                patientId={activePatientId}
+                hasToken={hasToken}
+                label={activePatient ? `Ask about ${activePatient.name}` : 'VitalsGuard Assistant'}
+            />
         </div>
     );
 }

@@ -14,5 +14,7 @@ xgboost
 joblib
 tensorflow-cpu
 mistralai==1.11.1
+supabase>=2.4.0
+gTTS>=2.5.0
 
 

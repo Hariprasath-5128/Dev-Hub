@@ -4,7 +4,22 @@ require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const jwt = require("jsonwebtoken");
 const supabase = require("./supabase");
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.warn("[Auth] WARNING: JWT_SECRET not set — login will not issue usable session tokens.");
+}
+
+const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY;
+if (!INTERNAL_SERVICE_KEY) {
+  console.warn("[Auth] WARNING: INTERNAL_SERVICE_KEY not set — the Python backend won't be able to call appointment routes.");
+}
+
+function signSessionToken({ userId, role, username }) {
+  return jwt.sign({ sub: userId, role, username }, JWT_SECRET, { expiresIn: "24h" });
+}
 
 const app = express();
 app.use(cors());
@@ -25,13 +40,7 @@ const doctorsCatalog = [
   { id: 'd3', name: 'Dr. Lisa Wong', specialty: 'Physiologist' },
 ];
 
-// In-memory store; replace with DB table when schema is finalized.
-const appointmentsStore = [];
-const alertsStore = []; // In-memory emergency alert store
-
-function isSameDate(isoDateTime, dateStr) {
-  return (isoDateTime || '').slice(0, 10) === dateStr;
-}
+const alertsStore = []; // In-memory emergency alert store — appointments now live in Supabase (see supabase_schema_appointments.sql)
 
 function parseDateTime(dateStr, timeStr) {
   return new Date(`${dateStr}T${timeStr}:00`);
@@ -119,6 +128,8 @@ app.post("/auth", async (req, res) => {
       success: true,
       message: "Signup successful!",
       userId: data.id,
+      role: data.role,
+      token: signSessionToken({ userId: data.id, role: data.role, username: data.username }),
     });
   }
 
@@ -138,7 +149,8 @@ app.post("/auth", async (req, res) => {
     success: true,
     message: "Login successful!",
     userId: data.id,
-    role: data.role // Send role back to frontend just in case
+    role: data.role, // Send role back to frontend just in case
+    token: signSessionToken({ userId: data.id, role: data.role, username: data.username }),
   });
 });
 
@@ -190,10 +202,88 @@ app.post("/store-report", async (req, res) => {
 
 // ═══════════════════════════════════════════════════
 //  APPOINTMENTS ROUTES
+//  Auth: either a valid end-user Bearer JWT (patients are locked to their
+//  own patientId; doctor/admin may act on any), or a trusted internal
+//  X-Internal-Key header (used by the Python backend's chatbot booking
+//  tool — RBAC for that patient_id was already enforced upstream there).
 // ═══════════════════════════════════════════════════
+
+function verifyAppointmentAuth(req, res, next) {
+  const internalKey = req.headers['x-internal-key'];
+  if (INTERNAL_SERVICE_KEY && internalKey === INTERNAL_SERVICE_KEY) {
+    req.auth = { internal: true };
+    return next();
+  }
+
+  const authHeader = req.headers['authorization'] || '';
+  if (!authHeader.toLowerCase().startsWith('bearer ')) {
+    return res.status(401).json({ success: false, message: 'Missing or malformed Authorization header.' });
+  }
+  try {
+    const payload = jwt.verify(authHeader.slice(7).trim(), JWT_SECRET);
+    req.auth = { internal: false, userId: payload.sub, role: payload.role, username: payload.username };
+    return next();
+  } catch (_err) {
+    return res.status(401).json({ success: false, message: 'Invalid or expired session token.' });
+  }
+}
+
+// Resolves+authorizes the patientId a request is allowed to touch, or
+// throws an Error with a .status the route handler should respond with.
+function resolvePatientId(req, requestedPatientId) {
+  if (req.auth.internal) return requestedPatientId; // already RBAC-checked upstream by Python
+  if (req.auth.role === 'patient') {
+    if (requestedPatientId && String(requestedPatientId) !== String(req.auth.userId)) {
+      const err = new Error("You are not authorized to access another patient's appointments.");
+      err.status = 403;
+      throw err;
+    }
+    return req.auth.userId;
+  }
+  if (!requestedPatientId) {
+    const err = new Error('patientId is required for this role.');
+    err.status = 400;
+    throw err;
+  }
+  return requestedPatientId;
+}
+
+app.use('/appointments', verifyAppointmentAuth);
+
+function rowToAppointment(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    username: row.username,
+    doctorId: row.doctor_id,
+    doctorName: row.doctor_name,
+    specialty: row.specialty,
+    start: row.start_time,
+    end: row.end_time,
+    durationMinutes: row.duration_minutes,
+    status: row.status,
+    createdAt: row.created_at,
+  };
+}
+
+async function fetchAppointmentsForDate(dateStr) {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('*')
+    .gte('start_time', `${dateStr}T00:00:00`)
+    .lte('start_time', `${dateStr}T23:59:59`);
+  if (error) throw error;
+  return (data || []).map(rowToAppointment);
+}
+
 app.get('/appointments/eligibility/:userId', async (req, res) => {
-  const { userId } = req.params;
-  const username = req.query.username || '';
+  let userId;
+  try {
+    userId = resolvePatientId(req, req.params.userId);
+  } catch (err) {
+    return res.status(err.status || 400).json({ success: false, message: err.message });
+  }
+  const username = req.query.username || req.auth.username || '';
 
   const eligibility = await getDischargeEligibility({ userId, username });
   res.json({
@@ -207,14 +297,26 @@ app.get('/appointments/eligibility/:userId', async (req, res) => {
 });
 
 app.get('/appointments/doctors', async (req, res) => {
-  const { date, patientId } = req.query;
+  let patientId;
+  try {
+    patientId = resolvePatientId(req, req.query.patientId);
+  } catch (err) {
+    return res.status(err.status || 400).json({ success: false, message: err.message });
+  }
+  const { date } = req.query;
+  if (!date) {
+    return res.status(400).json({ success: false, message: 'date is required.' });
+  }
 
-  if (!date || !patientId) {
-    return res.status(400).json({ success: false, message: 'date and patientId are required.' });
+  let dayAppointments;
+  try {
+    dayAppointments = await fetchAppointmentsForDate(date);
+  } catch (err) {
+    console.error('[Appointments] fetch by date failed:', err.message);
+    return res.status(500).json({ success: false, message: 'Could not load appointments.' });
   }
 
   const daySlots = createDaySlots(date);
-  const dayAppointments = appointmentsStore.filter((a) => isSameDate(a.start, date));
   const patientDayAppointments = dayAppointments.filter((a) => String(a.patientId) === String(patientId));
 
   const doctors = doctorsCatalog.map((doctor) => {
@@ -247,24 +349,40 @@ app.get('/appointments/doctors', async (req, res) => {
 });
 
 app.get('/appointments/my', async (req, res) => {
-  const { patientId } = req.query;
-
-  if (!patientId) {
-    return res.status(400).json({ success: false, message: 'patientId is required.' });
+  let patientId;
+  try {
+    patientId = resolvePatientId(req, req.query.patientId);
+  } catch (err) {
+    return res.status(err.status || 400).json({ success: false, message: err.message });
   }
 
-  const appointments = appointmentsStore
-    .filter((a) => String(a.patientId) === String(patientId))
-    .sort((a, b) => new Date(a.start) - new Date(b.start));
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('start_time', { ascending: true });
 
-  return res.json({ success: true, appointments });
+  if (error) {
+    console.error('[Appointments] /my query failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Could not load appointments.' });
+  }
+
+  return res.json({ success: true, appointments: (data || []).map(rowToAppointment) });
 });
 
 app.post('/appointments/book', async (req, res) => {
-  const { patientId, username, doctorId, start } = req.body;
+  let patientId;
+  try {
+    patientId = resolvePatientId(req, req.body.patientId);
+  } catch (err) {
+    return res.status(err.status || 400).json({ success: false, message: err.message });
+  }
 
-  if (!patientId || !doctorId || !start) {
-    return res.status(400).json({ success: false, message: 'patientId, doctorId and start are required.' });
+  const { doctorId, start } = req.body;
+  const username = req.body.username || req.auth.username || '';
+
+  if (!doctorId || !start) {
+    return res.status(400).json({ success: false, message: 'doctorId and start are required.' });
   }
 
   const doctor = doctorsCatalog.find((d) => d.id === doctorId);
@@ -298,36 +416,54 @@ app.post('/appointments/book', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Cannot book past slots.' });
   }
 
-  const doctorConflict = appointmentsStore.find((a) =>
+  const dateStr = slotStart.toISOString().slice(0, 10);
+  let dayAppointments;
+  try {
+    dayAppointments = await fetchAppointmentsForDate(dateStr);
+  } catch (err) {
+    console.error('[Appointments] conflict check failed:', err.message);
+    return res.status(500).json({ success: false, message: 'Could not verify slot availability.' });
+  }
+
+  const doctorConflict = dayAppointments.find((a) =>
     a.doctorId === doctorId && overlaps(slotStart, slotEnd, new Date(a.start), new Date(a.end))
   );
   if (doctorConflict) {
     return res.status(409).json({ success: false, message: 'This doctor slot is already booked.' });
   }
 
-  const patientConflict = appointmentsStore.find((a) =>
+  const patientConflict = dayAppointments.find((a) =>
     String(a.patientId) === String(patientId) && overlaps(slotStart, slotEnd, new Date(a.start), new Date(a.end))
   );
   if (patientConflict) {
     return res.status(409).json({ success: false, message: 'You already have an appointment overlapping this slot.' });
   }
 
-  const appointment = {
+  const row = {
     id: `apt_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
-    patientId,
+    patient_id: patientId,
     username: username || '',
-    doctorId: doctor.id,
-    doctorName: doctor.name,
+    doctor_id: doctor.id,
+    doctor_name: doctor.name,
     specialty: doctor.specialty,
-    start: slotStart.toISOString(),
-    end: slotEnd.toISOString(),
-    durationMinutes: APPOINTMENT_DURATION_MINUTES,
+    start_time: slotStart.toISOString(),
+    end_time: slotEnd.toISOString(),
+    duration_minutes: APPOINTMENT_DURATION_MINUTES,
     status: 'booked',
-    createdAt: new Date().toISOString()
   };
 
-  appointmentsStore.push(appointment);
-  return res.json({ success: true, appointment });
+  const { data: inserted, error: insertError } = await supabase
+    .from('appointments')
+    .insert([row])
+    .select()
+    .single();
+
+  if (insertError) {
+    console.error('[Appointments] insert failed:', insertError.message);
+    return res.status(500).json({ success: false, message: 'Could not save the appointment.' });
+  }
+
+  return res.json({ success: true, appointment: rowToAppointment(inserted) });
 });
 
 // ═══════════════════════════════════════════════════

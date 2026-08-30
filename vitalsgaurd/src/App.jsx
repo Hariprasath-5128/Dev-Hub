@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './config/supabase';
+import { restoreAuthToken, setAuthToken, clearAuthToken } from './utils/authToken';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './components/Login';
 import DoctorDashboard from './components/DoctorDashboard';
 import PatientDashboard from './components/PatientDashboard';
@@ -14,6 +16,11 @@ import HealthcarePolicy from './components/HealthcarePolicy';
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Derived independently from whether a real token is actually present —
+  // never trust a `hasToken` flag baked into an old localStorage user object
+  // (e.g. a session created before token support existed, or an expired
+  // token still sitting in storage would otherwise look "authenticated").
+  const [hasToken, setHasToken] = useState(false);
 
   // Check if a user session exists in localStorage on app load
   useEffect(() => {
@@ -21,6 +28,8 @@ export default function App() {
     if (storedUser) {
       try {
         setUser(JSON.parse(storedUser));
+        const restored = restoreAuthToken(); // re-attach the Authorization header for this session
+        setHasToken(Boolean(restored));
       } catch (e) {
         localStorage.removeItem('vg_user');
       }
@@ -28,15 +37,24 @@ export default function App() {
     setLoading(false);
   }, []);
 
-  function handleLogin({ role, userId, username }) {
+  function handleLogin({ role, userId, username, token }) {
     const userData = { role, userId, username };
     setUser(userData);
     localStorage.setItem('vg_user', JSON.stringify(userData));
+    if (token) {
+      setAuthToken(token); // enables RBAC-protected endpoints (e.g. the chatbot)
+      setHasToken(true);
+    } else {
+      clearAuthToken();
+      setHasToken(false);
+    }
   }
 
   async function handleLogout() {
     setUser(null);
+    setHasToken(false);
     localStorage.removeItem('vg_user');
+    clearAuthToken();
   }
 
   if (loading) {
@@ -49,6 +67,7 @@ export default function App() {
 
   return (
     <div className="app-container">
+      <ErrorBoundary>
       <Routes>
         <Route path="/" element={<Login onLogin={handleLogin} />} />
 
@@ -67,7 +86,7 @@ export default function App() {
           path="/doctor"
           element={
             user?.role === 'doctor' ? (
-              <DoctorDashboard onLogout={handleLogout} />
+              <DoctorDashboard onLogout={handleLogout} hasToken={hasToken} />
             ) : (
               <Navigate to="/" replace />
             )
@@ -78,7 +97,7 @@ export default function App() {
           path="/patient"
           element={
             user?.role === 'patient' ? (
-              <PatientDashboard userId={user.userId} onLogout={handleLogout} />
+              <PatientDashboard userId={user.userId} onLogout={handleLogout} hasToken={hasToken} />
             ) : (
               <Navigate to="/" replace />
             )
@@ -138,6 +157,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </ErrorBoundary>
     </div>
   );
 }

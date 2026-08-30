@@ -2,36 +2,49 @@
 VitalsGuard AI — FastAPI Backend
 =================================
 Routes:
-  POST /api/analyze-vitals      → full 5-agent pipeline
-  POST /api/ews                 → Early Warning Score only (fast, no LLM)
-  POST /api/fingerprint         → Health Anomaly Fingerprint only
-  POST /api/predict/disease     → Model 01 Health Predictor
-  GET  /api/health              → server health check
-  GET  /api/simulate            → sample vitals for frontend testing
+  POST /api/analyze-vitals              → full 8-agent pipeline
+  POST /api/vitals/record                → fast, no-LLM write of a live vitals reading
+  POST /api/chat                        → NLP/Chatbot agent
+  POST /api/ews                         → Early Warning Score only (fast, no LLM)
+  POST /api/fingerprint                 → Health Anomaly Fingerprint only
+  POST /api/predict/disease             → Model 01 Health Predictor
+  GET  /api/patient/{id}/profile        → patient profile
+  GET  /api/patient/{id}/history        → vitals + analysis history
+  GET  /api/patient/{id}/emergency-events → past emergency events
+  GET  /api/doctors                     → doctor contact directory
+  GET  /api/health                      → server health check
+  GET  /api/simulate                    → sample vitals for frontend testing
 """
 
 from __future__ import annotations
+import os
+import sys
+from dotenv import load_dotenv
+
+# Must run before any local import below — several of them (e.g. services.db)
+# read Supabase/JWT/etc. env vars at import time, and would otherwise always
+# see an empty environment regardless of what's actually in .env.
+load_dotenv()
+
 import asyncio
 import json
 import logging
-import os
-import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from dotenv import load_dotenv
 
 # Add base_models to path for Model 01 import
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../base_models'))
 
-from agents.vitals_agents import run_full_pipeline
+from agents.vitals_agents import run_full_pipeline, run_chat_pipeline
 from models.health_logic import compute_ews, match_fingerprints
 from tools.lstm_tool import lstm_predict
 from services.alert_service import dispatch_emergency_alert
+from services import data_store
+from services.auth import CurrentUser, enforce_patient_scope, get_current_user
 
-load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vitalsguard")
 
@@ -50,6 +63,29 @@ class VitalsPayload(BaseModel):
     # Trend data (sequence of readings)
     sequence: list[dict] | None = Field(None, description="List of past readings")
     history: list[dict] | None = Field(None, description="Legacy field")
+    # None = "use my own identity" for a patient, resolved by enforce_patient_scope().
+    # Must default to None, not a fixed id — RBAC treats any non-None value as an
+    # explicit request that must match the caller's own id (or be a doctor/admin).
+    patient_id: str | None = Field(None, description="Patient identifier for history/personalisation. Omit to use your own identity.")
+    use_ai: bool = Field(True, description="If false, skip the LLM agents entirely and use the deterministic rule-based analysis instead.")
+
+
+class VitalsRecordPayload(BaseModel):
+    """Lightweight reading write — no LLM pipeline, just persists to vitals_history
+    so get_latest_vitals()/the chatbot reflect what's actually on screen right now."""
+    heart_rate: float       = Field(..., ge=0,  le=300, description="BPM")
+    spo2: float              = Field(..., ge=0,  le=100, description="Oxygen saturation %")
+    temperature: float       = Field(..., ge=25, le=45,  description="Body temp °C")
+    systolic_bp: float       = Field(120.0, ge=40, le=250, description="Systolic mmHg")
+    diastolic_bp: float      = Field(80.0,  ge=30, le=150, description="Diastolic mmHg")
+    respiratory_rate: float  = Field(16.0,  ge=5,  le=60,  description="Breaths per minute")
+    patient_id: str | None   = Field(None, description="Omit to use your own identity.")
+
+
+class ChatPayload(BaseModel):
+    message: str = Field(..., description="The patient's natural-language question")
+    patient_id: str | None = Field(None, description="Patient identifier for grounding the answer. Omit to use your own identity.")
+    use_ai: bool = Field(True, description="If false, skip the LLM chatbot agent entirely and use the deterministic rule-based answer instead.")
 
 
 # ── App ──────────────────────────────────────────────────────────────────────
@@ -244,19 +280,34 @@ async def health_fingerprint(payload: VitalsPayload):
     }
 
 
+@app.post("/api/vitals/record")
+async def record_vitals(payload: VitalsRecordPayload, current_user: CurrentUser = Depends(get_current_user)):
+    """
+    Fast, non-LLM write of a live vitals reading (e.g. from a dashboard's
+    real-time display) into vitals_history, so get_latest_vitals() — and
+    therefore the chatbot's "analyse my current data" answers — reflect
+    what's actually on screen instead of falling back to the baseline profile.
+    """
+    patient_id = enforce_patient_scope(current_user, payload.patient_id)
+    vitals = payload.model_dump(exclude={"patient_id"})
+    entry = await asyncio.to_thread(data_store.record_vitals, patient_id, vitals)
+    return {"recorded": True, "vitals": entry}
+
+
 @app.post("/api/analyze-vitals")
-async def analyze_vitals(payload: VitalsPayload):
+async def analyze_vitals(payload: VitalsPayload, current_user: CurrentUser = Depends(get_current_user)):
     """
-    Full 5-agent pipeline endpoint.
+    Full 8-agent pipeline endpoint.
     Runs the Phidata agent debate, generates explanation, action plan,
-    emergency decision, and Digital Twin UI metadata.
+    emergency decision, comparison/vision analysis, and Digital Twin UI metadata.
     """
-    vitals = payload.model_dump(exclude={"history", "report_image"})
+    patient_id = enforce_patient_scope(current_user, payload.patient_id)
+    vitals = payload.model_dump(exclude={"history", "report_image", "patient_id", "use_ai"})
     report_image = payload.report_image
 
     try:
         # Run blocking agent pipeline in a thread so we don't block the event loop
-        result = await asyncio.to_thread(run_full_pipeline, vitals, report_image)
+        result = await asyncio.to_thread(run_full_pipeline, vitals, report_image, patient_id, payload.use_ai)
     except Exception as exc:
         logger.exception("Agent pipeline failed")
         raise HTTPException(status_code=500, detail=str(exc))
@@ -273,6 +324,45 @@ async def analyze_vitals(payload: VitalsPayload):
         )
 
     return result
+
+
+@app.post("/api/chat")
+async def chat(payload: ChatPayload, current_user: CurrentUser = Depends(get_current_user)):
+    """NLP/Chatbot Agent endpoint — answers questions grounded in patient data.
+    RBAC: a patient can only ever be answered about their own data; a doctor/admin
+    may query any patient_id they specify."""
+    patient_id = enforce_patient_scope(current_user, payload.patient_id)
+    try:
+        result = await asyncio.to_thread(
+            run_chat_pipeline, patient_id, payload.message, payload.use_ai, current_user.username
+        )
+    except Exception as exc:
+        logger.exception("Chat pipeline failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+    return result
+
+
+@app.get("/api/patient/{patient_id}/profile")
+async def patient_profile(patient_id: str, current_user: CurrentUser = Depends(get_current_user)):
+    resolved_id = enforce_patient_scope(current_user, patient_id)
+    return data_store.get_patient_profile(resolved_id)
+
+
+@app.get("/api/patient/{patient_id}/history")
+async def patient_history(patient_id: str, limit: int = 20, current_user: CurrentUser = Depends(get_current_user)):
+    resolved_id = enforce_patient_scope(current_user, patient_id)
+    return data_store.get_patient_history(resolved_id, limit)
+
+
+@app.get("/api/patient/{patient_id}/emergency-events")
+async def patient_emergency_events(patient_id: str, limit: int = 10, current_user: CurrentUser = Depends(get_current_user)):
+    resolved_id = enforce_patient_scope(current_user, patient_id)
+    return {"events": data_store.get_emergency_events(resolved_id, limit)}
+
+
+@app.get("/api/doctors")
+async def doctors(specialty: str | None = None):
+    return {"doctors": data_store.get_doctor_contacts(specialty)}
 
 
 if __name__ == "__main__":

@@ -8,8 +8,14 @@ CREATE TABLE IF NOT EXISTS public.users (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   username text NOT NULL UNIQUE,
   password text NOT NULL, -- Note: In a production app, this should be hashed (e.g., bcrypt)
+  role text NOT NULL DEFAULT 'patient', -- 'patient', 'doctor', 'admin'
   created_at timestamp with time zone DEFAULT now()
 );
+-- Defensive: if this table already existed from an older version of this
+-- script (without `role`), add it. CREATE TABLE IF NOT EXISTS silently
+-- no-ops on an existing table, so a column added here later wouldn't
+-- otherwise apply retroactively.
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'patient';
 
 -- ==========================================
 -- 2. Create the 'user_activity' table

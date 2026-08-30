@@ -1,20 +1,31 @@
 import React, { useRef, useState, Suspense, useMemo, useEffect } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
-import { OrbitControls, Html, Environment, Float } from '@react-three/drei';
+import { OrbitControls, Html, Float } from '@react-three/drei';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
 import * as THREE from 'three';
 import { normalizeRegion } from '../track5/digitalTwin/digitalTwinMapper';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MARKER POSITIONS are defined in MODEL-SPACE (0 = feet, 3.6 = top of head).
-// These are absolute, hardcoded values that bypass all bounding-box math,
+// X/Y fractions are absolute, hardcoded values that bypass bounding-box math,
 // because the bounding box approach had a reliable feedback loop issue.
+//
+// The Z (front/back depth) fraction is NOT arbitrary — it's derived from the
+// actual measured geometry of public/models/human.obj: that model's chest
+// depth is only ~18% of its height (half-depth ≈9%), but this used to be
+// hardcoded to 0.10 (10% of height), which sits right at — or just beyond —
+// the body's outer surface. From straight-on that's invisible (perspective
+// hides a marker floating a few cm in front of the chest), but from any
+// angled/side view the marker visibly floats in empty space next to the
+// body instead of appearing on it. 0.05 (~55% of the real half-depth) keeps
+// the marker solidly embedded in the torso from every camera angle.
 // ─────────────────────────────────────────────────────────────────────────────
 const MODEL_HEIGHT = 3.6;
+const MARKER_DEPTH = MODEL_HEIGHT * 0.05;
 const MARKER_POSITIONS = {
-  heart: [MODEL_HEIGHT * 0.08, MODEL_HEIGHT * 0.76, MODEL_HEIGHT * 0.10],
-  lungs: [MODEL_HEIGHT * -0.05, MODEL_HEIGHT * 0.72, MODEL_HEIGHT * 0.10],
-  body: [MODEL_HEIGHT * 0.02, MODEL_HEIGHT * 0.58, MODEL_HEIGHT * 0.10],
+  heart: [MODEL_HEIGHT * 0.08, MODEL_HEIGHT * 0.76, MARKER_DEPTH],
+  lungs: [MODEL_HEIGHT * -0.05, MODEL_HEIGHT * 0.72, MARKER_DEPTH],
+  body: [MODEL_HEIGHT * 0.02, MODEL_HEIGHT * 0.58, MARKER_DEPTH],
   brain: [0, MODEL_HEIGHT * 0.96, 0],
 };
 
@@ -282,15 +293,19 @@ export default function DigitalTwin({ scanData, isScanning }) {
 
       <div className="dt-canvas" style={{ width: '100%', height: '100%' }}>
         <Canvas camera={{ position: [0, 1.8, 6], fov: 40 }} dpr={[1, 2]}>
-          <ambientLight intensity={0.7} />
+          {/* No <Environment> here on purpose: drei's Environment presets fetch an
+              .hdr file from an external CDN at runtime, and that fetch failing
+              (network hiccup, CDN downtime, offline) throws inside the Suspense
+              boundary and previously blanked the whole page. Local lights only. */}
+          <ambientLight intensity={0.9} />
           <pointLight position={[10, 15, 10]} intensity={2} color="#0ea5e9" />
+          <pointLight position={[-10, 5, -8]} intensity={0.8} color="#7c5cf0" />
           <Suspense fallback={<Html center><p style={{ color: '#38bdf8', letterSpacing: 2 }}>INITIALIZING MODEL...</p></Html>}>
             <Float speed={1} rotationIntensity={0.2} floatIntensity={0.25}>
               <group position={[0, -1.2, 0]}>
                 <HumanModel scanData={scanData} isScanning={isScanning} />
               </group>
             </Float>
-            <Environment preset="night" />
           </Suspense>
           <OrbitControls enablePan minDistance={1.5} maxDistance={25}
             autoRotate={!scanData && !isScanning} autoRotateSpeed={0.6}

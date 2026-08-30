@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS public.users (
   role text NOT NULL DEFAULT 'patient', -- 'patient', 'doctor', 'admin'
   created_at timestamp with time zone DEFAULT now()
 );
+-- Defensive: CREATE TABLE IF NOT EXISTS no-ops if supabase_schema.sql ran
+-- first, so make sure `role` exists either way.
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'patient';
 
 -- ==========================================
 -- 2. Create the 'medical_reports' table
@@ -33,3 +36,16 @@ CREATE TABLE IF NOT EXISTS public.medical_reports (
 -- ==========================================
 ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.medical_reports DISABLE ROW LEVEL SECURITY;
+
+-- ==========================================
+-- 4. Demo login accounts (username/password are intentionally identical for
+--    quick local testing). Delete or change these before any real deployment.
+--    (The matching patient_profiles seed for patient1 lives in
+--    supabase_schema_agents.sql, since patient_profiles is defined there
+--    and that script runs after this one.)
+-- ==========================================
+INSERT INTO public.users (username, password, role) VALUES
+  ('patient1', 'patient1', 'patient'),
+  ('doctor1', 'doctor1', 'doctor'),
+  ('admin1', 'admin1', 'admin')
+ON CONFLICT (username) DO NOTHING;

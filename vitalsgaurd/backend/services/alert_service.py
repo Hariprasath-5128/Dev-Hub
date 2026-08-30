@@ -1,7 +1,7 @@
 """
 Alert Service — VitalsGuard AI
 ----------------------------------
-Sends emergency SMS (Twilio) and Email (SMTP) alerts when EWS = critical.
+Sends emergency Telegram and Email (SMTP) alerts when EWS = critical.
 Both methods are stubbed with clear TODO markers for production keys.
 """
 
@@ -10,6 +10,8 @@ import os
 import smtplib
 import logging
 from email.mime.text import MIMEText
+
+import httpx
 
 logger = logging.getLogger("vitalsguard.alerts")
 
@@ -41,29 +43,22 @@ def _send_email_alert(subject: str, body: str) -> None:
         logger.error("Email alert failed: %s", exc)
 
 
-def _send_sms_alert(message: str) -> None:
-    """Send an SMS via Twilio. Configure via environment variables."""
-    try:
-        from twilio.rest import Client  # type: ignore
-    except ImportError:
-        logger.warning("Twilio not installed — SMS alert skipped.")
+def _send_telegram_alert(message: str) -> None:
+    """Send a message via the Telegram Bot API. Configure via environment variables."""
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
+    if not all([bot_token, chat_id]):
+        logger.warning("Telegram alert skipped — TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not configured.")
         return
 
-    sid   = os.getenv("TWILIO_ACCOUNT_SID")
-    token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_ = os.getenv("TWILIO_FROM_NUMBER")
-    to    = os.getenv("ALERT_TO_NUMBER")
-
-    if not all([sid, token, from_, to]):
-        logger.warning("SMS alert skipped — Twilio credentials not configured.")
-        return
-
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     try:
-        client = Client(sid, token)
-        client.messages.create(body=message, from_=from_, to=to)
-        logger.info("SMS alert sent to %s", to)
+        resp = httpx.post(url, json={"chat_id": chat_id, "text": message}, timeout=10)
+        resp.raise_for_status()
+        logger.info("Telegram alert sent to chat %s", chat_id)
     except Exception as exc:
-        logger.error("SMS alert failed: %s", exc)
+        logger.error("Telegram alert failed: %s", exc)
 
 
 def dispatch_emergency_alert(vitals: dict, consensus: str, ews_level: str) -> dict:
@@ -87,6 +82,6 @@ def dispatch_emergency_alert(vitals: dict, consensus: str, ews_level: str) -> di
     )
 
     _send_email_alert(subject, body)
-    _send_sms_alert(f"VitalsGuard CRITICAL: {consensus}. Check patient immediately.")
+    _send_telegram_alert(f"🚨 VitalsGuard CRITICAL: {consensus}\n\nCheck patient immediately.")
 
-    return {"dispatched": True, "channels": ["email", "sms"]}
+    return {"dispatched": True, "channels": ["email", "telegram"]}

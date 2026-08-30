@@ -9,6 +9,19 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { LineChart as LineChartIcon, ShieldCheck, TrendingUp, TrendingDown, ArrowRight, Stethoscope } from 'lucide-react';
+
+function SectionIcon({ icon: Icon, color = '#7C3AED', size = 16 }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 30, height: 30, borderRadius: '10px',
+      background: `${color}1a`, color, flexShrink: 0,
+    }}>
+      <Icon size={size} strokeWidth={2.25} />
+    </span>
+  );
+}
 
 export default function M1({
   healthMetrics = [],
@@ -42,7 +55,7 @@ export default function M1({
 
       <div className="premium-card" style={{ padding: '2rem', marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.3rem', fontWeight: '900' }}>📈 Live Vitals Monitor</h3>
+          <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.3rem', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '10px' }}><SectionIcon icon={LineChartIcon} /> Live Vitals Monitor</h3>
           <div style={{ display: 'flex', background: 'rgba(247,167,192,0.1)', padding: '6px', borderRadius: '12px', gap: '6px', border: '1px solid rgba(247,167,192,0.2)' }}>
             <button
               onClick={() => {
@@ -83,7 +96,7 @@ export default function M1({
       <div className="premium-card" style={{ padding: '2rem', marginBottom: '2rem', borderLeft: severityScore > 70 ? '6px solid #ef4444' : 'none', background: severityScore > 70 ? 'linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(254,226,226,0.6) 100%)' : undefined }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.25rem', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '10px' }}><span>🛡️</span> Real-time Clinical Risk Assessment</h3>
+            <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.25rem', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '10px' }}><SectionIcon icon={ShieldCheck} /> Real-time Clinical Risk Assessment</h3>
             <p style={{ margin: '0.5rem 0 0 0', color: '#475569', fontSize: '0.95rem', fontWeight: '500' }}>Cross-validated analyzer monitoring multiple vital streams for emergency patterns.</p>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -94,18 +107,24 @@ export default function M1({
             </div>
           </div>
         </div>
-        <div style={{ width: '100%', height: '12px', background: '#f1f5f9', borderRadius: '6px', marginTop: '1.5rem', overflow: 'hidden' }}>
+        <div style={{ width: '100%', height: '12px', background: '#fbe4ec', borderRadius: '6px', marginTop: '1.5rem', overflow: 'hidden' }}>
           <div style={{ width: `${severityScore}%`, height: '100%', background: severityScore > 70 ? 'linear-gradient(90deg, #f59e0b, #ef4444)' : severityScore > 40 ? '#f59e0b' : '#10b981', transition: 'width 1.5s ease-in-out', boxShadow: '0 0 8px rgba(0,0,0,0.1)' }} />
         </div>
       </div>
 
       <div className="premium-card" style={{ padding: '1.5rem 2.5rem', marginBottom: '2rem', borderLeft: `8px solid ${trendResult?.trend === 'Deteriorating' ? '#ef4444' : trendResult?.trend === 'Improving' ? '#10b981' : '#be185d'}`, display: 'flex', alignItems: 'center', gap: '2rem' }}>
-        <div style={{ width: '65px', height: '65px', borderRadius: '20px', background: trendResult?.trend === 'Deteriorating' ? '#fee2e2' : trendResult?.trend === 'Improving' ? '#ecfdf5' : 'rgba(255,228,233,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.2rem', boxShadow: '0 8px 15px rgba(0,0,0,0.05)' }}>{trendResult?.trend === 'Deteriorating' ? '📉' : trendResult?.trend === 'Improving' ? '📈' : '➡️'}</div>
+        <div style={{ width: '65px', height: '65px', borderRadius: '20px', background: trendResult?.trend === 'Deteriorating' ? '#fee2e2' : trendResult?.trend === 'Improving' ? '#ecfdf5' : 'rgba(255,228,233,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 15px rgba(0,0,0,0.05)' }}>
+          {trendResult?.trend === 'Deteriorating'
+            ? <TrendingDown size={30} color="#ef4444" strokeWidth={2.25} />
+            : trendResult?.trend === 'Improving'
+              ? <TrendingUp size={30} color="#10b981" strokeWidth={2.25} />
+              : <ArrowRight size={30} color="#be185d" strokeWidth={2.25} />}
+        </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '0.75rem', color: '#334155', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>AI Trend Prediction Monitor (Model 03)</div>
           <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: trendResult?.trend?.toLowerCase() === 'deteriorating' ? '#ef4444' : trendResult?.trend?.toLowerCase() === 'improving' ? '#10b981' : '#1e293b' }}>{trendResult?.trend ? `Patient trajectory is ${trendResult.trend.toLowerCase()}` : 'Analyzing clinical sequence...'}</div>
           {trendExplanation && (
-            <div style={{ fontSize: '0.9rem', color: '#475569', marginTop: '10px', padding: '12px 18px', background: '#f8fafc', borderRadius: '10px', borderLeft: '4px solid #7C3AED', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ fontSize: '0.9rem', color: '#475569', marginTop: '10px', padding: '12px 18px', background: '#fdf6f9', borderRadius: '14px', borderLeft: '4px solid #7C3AED', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.02)' }}>
               <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '800', marginBottom: '4px' }}>REASONING OBSERVATION</div>
               {explaining ? '📡 Generating clinical brief...' : trendExplanation}
             </div>
@@ -119,11 +138,11 @@ export default function M1({
         )}
       </div>
 
-      <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem' }}>
-        <h3 style={{ margin: '0 0 1rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}><span>👨‍⚕️</span> Care Team & Active Consultations</h3>
+      <div className="premium-card" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+        <h3 style={{ margin: '0 0 1rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}><SectionIcon icon={Stethoscope} /> Care Team & Active Consultations</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
           {doctors.map((doctor, idx) => (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: '#fdf6f9', borderRadius: '14px', border: '1px solid rgba(219,39,119,0.14)' }}>
               <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#7C3AED', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.1rem' }}>{doctor.name[0]}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.95rem' }}>{doctor.name}</div>

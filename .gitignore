@@ -19,3 +19,7 @@ __pycache__/
 # Misc
 .env
 .DS_Store
+
+# Media and Demos
+*.mp4
+Dev-Hub Demonstration.mp4

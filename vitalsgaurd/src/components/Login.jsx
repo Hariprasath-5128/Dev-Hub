@@ -299,7 +299,7 @@ export default function Login({ onLogin }) {
       });
 
       if (res.data.success) {
-        onLogin({ role: res.data.role || role, userId: res.data.userId, username });
+        onLogin({ role: res.data.role || role, userId: res.data.userId, username, token: res.data.token });
         navigate(`/${res.data.role || role}`);
       } else {
         setError(res.data.message || "Credential verification failed.");
@@ -316,7 +316,7 @@ export default function Login({ onLogin }) {
     }
   };
 
-  const quickLogin = (selectedRole) => {
+  const quickLogin = async (selectedRole) => {
     setIsLoading(true);
     const mock = {
       patient: "patient1",
@@ -327,8 +327,25 @@ export default function Login({ onLogin }) {
     setUsername(mock);
     setPassword(mock);
 
+    // Try a real login first so the demo session gets a genuine RBAC token
+    // (needed for the chatbot and other protected endpoints). These demo
+    // accounts are seeded by server/supabase_schema_medical.sql.
+    try {
+      const res = await axios.post("/auth", { username: mock, password: mock, action: "login" });
+      if (res.data.success) {
+        onLogin({ role: res.data.role || selectedRole, userId: res.data.userId, username: mock, token: res.data.token });
+        navigate(`/${res.data.role || selectedRole}`);
+        setIsLoading(false);
+        return;
+      }
+    } catch (err) {
+      // fall through to the offline mock below
+    }
+
+    // Offline fallback: no backend reachable, so no token — RBAC-protected
+    // features (like the chatbot) will be unavailable in this session.
     setTimeout(() => {
-      onLogin({ role: selectedRole, userId: `demo-${selectedRole}`, username: mock });
+      onLogin({ role: selectedRole, userId: `demo-${selectedRole}`, username: mock, token: null });
       navigate(`/${selectedRole}`);
       setIsLoading(false);
     }, 900);

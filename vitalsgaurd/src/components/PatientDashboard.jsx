@@ -1,17 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { HeartPulse, User, Stethoscope, Shield, LogOut, Activity, Plus, ArrowRight, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { HeartPulse, User, Stethoscope, Shield, LogOut, Activity, Plus, ArrowRight, Eye, EyeOff, RefreshCw, Target, Wind, Thermometer, Gauge, Brain, Dna, Bot, PieChart, ShieldCheck, FileText, Sparkles, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
 import { patients } from '../data/mockVitals';
 import DigitalTwin from './DigitalTwin';
 import M1 from './m1';
 import { Button } from './ui/button';
+import ChatWidget from './ChatWidget';
+import { getAuthToken } from '../utils/authToken';
 
 const API_BASES = ['/api', '/api'];
 const NODE_API_BASE = '';
+
+// Small circular icon badge used in section headers — replaces raw emoji
+// glyphs with real iconography that can pick up the section's accent color.
+function SectionIcon({ icon: Icon, color = '#7C3AED', size = 16 }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 30, height: 30, borderRadius: '10px',
+      background: `${color}1a`, color, flexShrink: 0,
+    }}>
+      <Icon size={size} strokeWidth={2.25} />
+    </span>
+  );
+}
 
 function hexToRgb(hex) {
   const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec((hex || "").trim());
@@ -222,12 +238,16 @@ function MetalButton({
 
 async function postJsonWithFallback(urls, payload) {
   let lastError = 'Service is currently unavailable.';
+  const token = getAuthToken();
 
   for (const url of urls) {
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(payload)
       });
 
@@ -327,7 +347,7 @@ function getSituationDescription(condition) {
   return 'Pattern deviates from normal baseline. Continuous monitoring advised.';
 }
 
-export default function PatientDashboard({ userId, onLogout }) {
+export default function PatientDashboard({ userId, onLogout, hasToken = false }) {
   const patient = patients.find((p) => p.id === userId) || patients[0];
   const [activeTab, setActiveTab] = useState('dashboard');
   const navigate = useNavigate();
@@ -366,6 +386,7 @@ export default function PatientDashboard({ userId, onLogout }) {
   const [mlResult, setMlResult] = useState(null);
   const [severityScore, setSeverityScore] = useState(0);
   const [agentScanLoading, setAgentScanLoading] = useState(false);
+  const [scanElapsedSeconds, setScanElapsedSeconds] = useState(0);
   const [agentScanError, setAgentScanError] = useState('');
   const [agentScanResult, setAgentScanResult] = useState(null);
   const [digitalTwinData, setDigitalTwinData] = useState({
@@ -509,6 +530,40 @@ export default function PatientDashboard({ userId, onLogout }) {
     }, 1500); return () => clearInterval(timer);
   }, [dataGenerationMode]);
 
+  // ++++++++++++++++++++ SYNC LIVE VITALS TO BACKEND ++++++++++++++++++++
+  // The simulation above is purely client-side and never reaches the server,
+  // so anything backend-driven (the chatbot's "latest vitals", history, EWS)
+  // would otherwise only ever see the seeded baseline. Push what's on screen
+  // periodically (not every 1.5s tick — that's needlessly chatty) so
+  // get_latest_vitals() reflects the same numbers the patient is looking at.
+  // Reads from a ref (not the interval's dependency array) so the values it
+  // sends are always current without tearing down/recreating the interval
+  // on every 1.5s simulation tick — that would starve it before 8s ever elapses.
+  const liveVitalsRef = useRef(null);
+  liveVitalsRef.current = {
+    heart_rate: currentHr, spo2: currentSpo2, temperature: currentTemp,
+    systolic_bp: currentBpSystolic, diastolic_bp: currentBpDiastolic,
+  };
+
+  useEffect(() => {
+    if (!hasToken) return; // no session token yet — nothing to authenticate with
+    const syncTimer = setInterval(() => {
+      axios.post('/api/vitals/record', liveVitalsRef.current).catch(() => {
+        // best-effort — a missed sync tick isn't worth surfacing to the user
+      });
+    }, 8000);
+    return () => clearInterval(syncTimer);
+  }, [hasToken]);
+
+  // Ticks while the 7-agent scan runs so the UI can show elapsed time —
+  // the full chain (Monitoring -> Diagnosis -> Debate -> 4 parallel agents)
+  // typically takes 20-45s; without visible progress this reads as "stuck."
+  useEffect(() => {
+    if (!agentScanLoading) { setScanElapsedSeconds(0); return; }
+    const tick = setInterval(() => setScanElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(tick);
+  }, [agentScanLoading]);
+
   // Interactive Analyzer - Live update with ML
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -577,22 +632,58 @@ export default function PatientDashboard({ userId, onLogout }) {
             setTrendResult(data03);
           }
 
-          // 3. Update Trajectory (Model 07 fallback or separate call if needed)
-          // For now, we reuse the diagnosis confidence for the simple trajectory
-          const currentScore = Math.round((data01.confidence || 0) * 100);
-          const simulatedTrajectory = [];
-          for (let hour = 0; hour <= 24; hour += 2) {
-            let riskValue = currentScore;
-            const isAbnormal = data01.confidence > 0.4;
-            if (isAbnormal) {
-              riskValue = Math.min(currentScore + (hour * 2.0), 95);
-              if (hour > 12) riskValue = Math.max(riskValue - (hour - 12) * 1.5, currentScore);
-            } else {
-              riskValue = Math.max(currentScore - (hour * 1.5), 10);
-            }
-            simulatedTrajectory.push({ hour, risk: Math.round(riskValue) });
+        }
+
+        // 3. What-If Simulator (Model 07) — real 2h/6h/12h/24h risk projections,
+        // driving both the trajectory chart and the Digital Twin marker below.
+        try {
+          const whatIfPayload = {
+            heart_rate: hrNum,
+            spo2: spo2Num,
+            temperature: tempNum,
+            respiratory_rate: 16, // not slider-controlled; matches the model's own default
+            systolic_bp: Number(inputBpSystolic),
+          };
+          const integratedRes = await axios.post('/api/integrated/analysis', whatIfPayload);
+          const model07 = integratedRes.data?.model07;
+          const horizons = ['2h', '6h', '12h', '24h'];
+
+          if (model07 && horizons.every((h) => model07[h])) {
+            setTrajectoryData(
+              horizons.map((h, idx) => ({
+                hour: [2, 6, 12, 24][idx],
+                risk: Math.round((model07[h].risk_score || 0) * 100),
+              }))
+            );
+
+            // Point the Digital Twin at whichever horizon carries the highest
+            // projected risk — the most clinically significant condition the
+            // simulator foresees, not just the nearest-term one.
+            const worstHorizon = horizons.reduce((best, h) =>
+              (model07[h]?.risk_score || 0) > (model07[best]?.risk_score || 0) ? h : best
+            , '2h');
+            const worst = model07[worstHorizon];
+
+            const heatmapColor =
+              worst.risk_level === 'high' ? '#ef4444' :
+              worst.risk_level === 'moderate' ? '#f59e0b' : '#22c55e';
+
+            setDigitalTwinData((prev) => ({
+              ...prev,
+              condition: worst.condition,
+              affected_regions: ['none'], // let DigitalTwin derive the exact marker from `condition` text
+              heatmap_colour: heatmapColor,
+              ui_label: `What-If projection (${worstHorizon}): ${worst.condition}`,
+              consensus: `Simulated trajectory is ${model07.overall_trajectory}. Highest projected risk at ${worstHorizon}: ${worst.condition} (${Math.round((worst.risk_score || 0) * 100)}% risk, ${Math.round((worst.confidence || 0) * 100)}% model confidence).`,
+              confidence: worst.confidence,
+              vitals: {
+                heart_rate: hrNum, spo2: spo2Num, temperature: tempNum,
+                systolic_bp: Number(inputBpSystolic), diastolic_bp: Number(inputBpDiastolic),
+              },
+            }));
           }
-          setTrajectoryData(simulatedTrajectory);
+        } catch (whatIfErr) {
+          console.error('What-If simulation failed', whatIfErr);
         }
       } catch (err) {
         console.error("Unified AI Analysis failed", err);
@@ -754,18 +845,24 @@ export default function PatientDashboard({ userId, onLogout }) {
     ];
 
     let lastError = 'Agent-debate service is currently unavailable.';
+    const token = getAuthToken();
 
     for (const endpoint of endpoints) {
       try {
         const response = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
           const message = await response.text();
-          lastError = message || `Request failed on ${endpoint}`;
+          lastError = response.status === 401
+            ? 'Your session has expired or is missing its login token. Please log out and log back in.'
+            : (message || `Request failed on ${endpoint}`);
           continue;
         }
 
@@ -942,10 +1039,12 @@ export default function PatientDashboard({ userId, onLogout }) {
           gap: 8px;
         }
         .premium-card {
-          background: rgba(255, 255, 255, 0.85);
+          background: linear-gradient(150deg, rgba(255,255,255,0.8) 0%, rgba(255,214,224,0.55) 55%, rgba(238,220,255,0.5) 100%);
+          backdrop-filter: blur(30px) saturate(160%);
+          -webkit-backdrop-filter: blur(30px) saturate(160%);
           border-radius: 24px;
-          border: 1px solid rgba(247, 167, 192, 0.2);
-          box-shadow: 0 10px 30px rgba(131, 24, 67, 0.05);
+          border: 1px solid rgba(219,39,119,0.22);
+          box-shadow: 0 12px 40px rgba(219, 39, 119, 0.12);
           transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
         .premium-card:hover {
@@ -1046,7 +1145,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                 fontSize: '0.85rem',
                 fontWeight: '800',
                 padding: '0.5rem 1.2rem',
-                borderRadius: '12px',
+                borderRadius: '18px',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 boxShadow: activeTab === tab.toLowerCase() ? '0 4px 12px rgba(79, 70, 229, 0.2)' : 'none',
                 textTransform: 'uppercase',
@@ -1087,43 +1186,43 @@ export default function PatientDashboard({ userId, onLogout }) {
           <>
             {/* ==================== INTERACTIVE ANALYZER ==================== */}
             {/* Real-time Modifiers - What-If Engine */}
-            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem', border: '2px solid #e9d5ff' }}>
+            <div style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.8) 0%, rgba(255,214,224,0.55) 55%, rgba(238,220,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', borderRadius: '18px', padding: '2rem', boxShadow: '0 10px 32px rgba(219,39,119,0.10)', marginBottom: '2rem', border: '2px solid #e9d5ff' }}>
               <h3 style={{ margin: '0 0 1rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🎯</span> What-If Engine - Adjust Parameters
+                <SectionIcon icon={Target} color="#db2777" /> What-If Engine · Adjust Parameters
               </h3>
               <p style={{ margin: '0 0 1.5rem 0', color: '#666', fontSize: '0.95rem' }}>Modify vital parameters in real-time to simulate different scenarios and see how they affect AI diagnosis and risk assessment instantly.</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '2rem' }}>
                 {/* HR Modifier */}
-                <div style={{ padding: '1.5rem', background: '#f9f9f9', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: '#333', fontWeight: '700', fontSize: '0.95rem' }}>❤️ Heart Rate (BPM)</label>
+                <div style={{ padding: '1.5rem', background: '#fdf6f9', borderRadius: '18px', border: '1px solid rgba(219,39,119,0.14)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem', color: '#333', fontWeight: '700', fontSize: '0.95rem' }}><HeartPulse size={15} color="#ef4444" /> Heart Rate (BPM)</label>
                   <input
                     type="range"
                     min="40"
                     max="150"
                     value={inputHr}
                     onChange={e => setInputHr(Number(e.target.value))}
-                    style={{ width: '100%', cursor: 'pointer', marginBottom: '0.75rem' }}
+                    style={{ width: '100%', cursor: 'pointer', marginBottom: '0.75rem', accentColor: '#db2777' }}
                   />
                   <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#ef4444', textAlign: 'center' }}>{inputHr}</div>
                 </div>
 
                 {/* SpO2 Modifier */}
-                <div style={{ padding: '1.5rem', background: '#f9f9f9', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: '#333', fontWeight: '700', fontSize: '0.95rem' }}>💨 SpO₂ (%)</label>
+                <div style={{ padding: '1.5rem', background: '#fdf6f9', borderRadius: '18px', border: '1px solid rgba(219,39,119,0.14)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem', color: '#333', fontWeight: '700', fontSize: '0.95rem' }}><Wind size={15} color="#3b82f6" /> SpO₂ (%)</label>
                   <input
                     type="range"
                     min="75"
                     max="100"
                     value={inputSpo2}
                     onChange={e => setInputSpo2(Number(e.target.value))}
-                    style={{ width: '100%', cursor: 'pointer', marginBottom: '0.75rem' }}
+                    style={{ width: '100%', cursor: 'pointer', marginBottom: '0.75rem', accentColor: '#db2777' }}
                   />
                   <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#3b82f6', textAlign: 'center' }}>{inputSpo2}</div>
                 </div>
 
                 {/* Temp Modifier */}
-                <div style={{ padding: '1.5rem', background: '#f9f9f9', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: '#333', fontWeight: '700', fontSize: '0.95rem' }}>🌡️ Temperature (°C)</label>
+                <div style={{ padding: '1.5rem', background: '#fdf6f9', borderRadius: '18px', border: '1px solid rgba(219,39,119,0.14)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem', color: '#333', fontWeight: '700', fontSize: '0.95rem' }}><Thermometer size={15} color="#f59e0b" /> Temperature (°C)</label>
                   <input
                     type="range"
                     min="36"
@@ -1131,14 +1230,14 @@ export default function PatientDashboard({ userId, onLogout }) {
                     step="0.1"
                     value={inputTemp}
                     onChange={e => setInputTemp(Number(e.target.value))}
-                    style={{ width: '100%', cursor: 'pointer', marginBottom: '0.75rem' }}
+                    style={{ width: '100%', cursor: 'pointer', marginBottom: '0.75rem', accentColor: '#db2777' }}
                   />
                   <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#f59e0b', textAlign: 'center' }}>{inputTemp.toFixed(1)}</div>
                 </div>
 
                 {/* BP Modifier */}
-                <div style={{ padding: '1.5rem', background: '#f9f9f9', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: '#333', fontWeight: '700', fontSize: '0.95rem' }}>📊 Blood Pressure (mmHg)</label>
+                <div style={{ padding: '1.5rem', background: '#fdf6f9', borderRadius: '18px', border: '1px solid rgba(219,39,119,0.14)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem', color: '#333', fontWeight: '700', fontSize: '0.95rem' }}><Gauge size={15} color="#10b981" /> Blood Pressure (mmHg)</label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
                     <input
                       type="range"
@@ -1146,7 +1245,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                       max="180"
                       value={inputBpSystolic}
                       onChange={e => setInputBpSystolic(Number(e.target.value))}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', accentColor: '#db2777' }}
                     />
                     <input
                       type="range"
@@ -1154,7 +1253,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                       max="120"
                       value={inputBpDiastolic}
                       onChange={e => setInputBpDiastolic(Number(e.target.value))}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', accentColor: '#db2777' }}
                     />
                   </div>
                   <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#10b981', textAlign: 'center' }}>{inputBpSystolic}/{inputBpDiastolic}</div>
@@ -1164,17 +1263,17 @@ export default function PatientDashboard({ userId, onLogout }) {
 
 
             {/* ML Results */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)', gap: '2rem', marginBottom: '2rem' }}>
               {/* ML Current Situation */}
-              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+              <div style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.8) 0%, rgba(255,214,224,0.55) 55%, rgba(238,220,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', borderRadius: '18px', padding: '2rem', boxShadow: '0 10px 32px rgba(219,39,119,0.10)' }}>
                 <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>📊</span> AI Diagnosis
+                  <SectionIcon icon={Brain} color="#7C3AED" /> AI Diagnosis
                 </h3>
                 {mlResult ? (
                   <div>
                     <div style={{ fontSize: '3rem', fontWeight: 'bold', color: '#7C3AED', lineHeight: 1, marginBottom: '1rem' }}>{mlResult.predicted_condition.replace('_', ' ')}</div>
                     <p style={{ color: '#666', fontSize: '1rem', margin: '0.8rem 0' }}>Confidence: <strong>{(mlResult.confidence * 100).toFixed(1)}%</strong></p>
-                    <div style={{ padding: '1.2rem', backgroundColor: '#f1f5f9', borderRadius: '12px', borderLeft: '5px solid #7C3AED' }}>
+                    <div style={{ padding: '1.2rem', backgroundColor: '#fdf6f9', borderRadius: '18px', borderLeft: '5px solid #7C3AED' }}>
                       <p style={{ margin: 0, color: '#475569', fontSize: '0.95rem', lineHeight: 1.5 }}>{getSituationDescription(mlResult.predicted_condition)}</p>
                     </div>
                   </div>
@@ -1182,9 +1281,9 @@ export default function PatientDashboard({ userId, onLogout }) {
               </div>
 
               {/* Disease Probabilities */}
-              <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+              <div style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.8) 0%, rgba(255,214,224,0.55) 55%, rgba(238,220,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', borderRadius: '18px', padding: '2rem', boxShadow: '0 10px 32px rgba(219,39,119,0.10)' }}>
                 <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>🩺</span> Disease Probabilities
+                  <SectionIcon icon={PieChart} color="#7C3AED" /> Disease Probabilities
                 </h3>
                 {mlResult && mlResult.chartData ? (
                   <ResponsiveContainer width="100%" height={250}>
@@ -1200,9 +1299,9 @@ export default function PatientDashboard({ userId, onLogout }) {
             </div>
 
             {/* Projected Health Risks - Model 01 Based */}
-            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem' }}>
+            <div style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.8) 0%, rgba(255,214,224,0.55) 55%, rgba(238,220,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', borderRadius: '18px', padding: '2rem', boxShadow: '0 10px 32px rgba(219,39,119,0.10)', marginBottom: '2rem' }}>
               <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🎯</span> Projected Health Risks (Model 01)
+                <SectionIcon icon={Target} color="#7C3AED" /> Projected Health Risks <span style={{ fontWeight: 400, opacity: 0.55, fontSize: '0.85em' }}>· Model 01</span>
               </h3>
 
               {mlResult ? (
@@ -1233,7 +1332,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                           }
 
                           return (
-                            <div key={idx} style={{ backgroundColor: '#f8fafc', padding: '1.5rem', borderRadius: '10px', border: `2px solid ${riskColor}`, textAlign: 'center' }}>
+                            <div key={idx} style={{ backgroundColor: '#fdf6f9', padding: '1.5rem', borderRadius: '10px', border: `2px solid ${riskColor}`, textAlign: 'center' }}>
                               <div style={{ fontSize: '1rem', color: '#1f2937', fontWeight: '600', marginBottom: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{condition.replace('_', ' ')}</div>
                               <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: riskColor, marginBottom: '0.5rem' }}>{(prob * 100).toFixed(1)}%</div>
                               <div style={{ fontSize: '1.3rem', marginBottom: '0.75rem' }}>{riskIcon}</div>
@@ -1247,37 +1346,37 @@ export default function PatientDashboard({ userId, onLogout }) {
                   </div>
 
                   {/* Risk Assessment Insight */}
-                  <div style={{ padding: '1.5rem', backgroundColor: severityScore > 70 ? '#fee2e2' : severityScore > 40 ? '#fef3c7' : '#ecfdf5', borderRadius: '12px', borderLeft: `5px solid ${severityScore > 70 ? '#ef4444' : severityScore > 40 ? '#f59e0b' : '#10b981'}`, marginBottom: '2rem' }}>
+                  <div style={{ padding: '1.5rem', backgroundColor: severityScore > 70 ? '#fee2e2' : severityScore > 40 ? '#fef3c7' : '#ecfdf5', borderRadius: '18px', borderLeft: `5px solid ${severityScore > 70 ? '#ef4444' : severityScore > 40 ? '#f59e0b' : '#10b981'}`, marginBottom: '2rem' }}>
                     <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', color: severityScore > 70 ? '#991b1b' : severityScore > 40 ? '#92400e' : '#065f46' }}>
-                      <span>{severityScore > 70 ? '⚠️' : severityScore > 40 ? '⏱️' : '✅'}</span> Risk Assessment
+                      {severityScore > 70 ? <AlertTriangle size={17} /> : severityScore > 40 ? <Clock size={17} /> : <CheckCircle2 size={17} />} Risk Assessment
                     </h4>
                     <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: 1.6, color: severityScore > 70 ? '#991b1b' : severityScore > 40 ? '#92400e' : '#065f46' }}>
                       {severityScore > 70
-                        ? `🔴 High Risk Detected: ${mlResult.predicted_condition.replace('_', ' ')} is flagged with high confidence (${severityScore}%). Review vitals immediately and consider medical intervention.`
+                        ? `High Risk Detected: ${mlResult.predicted_condition.replace('_', ' ')} is flagged with high confidence (${severityScore}%). Review vitals immediately and consider medical intervention.`
                         : severityScore > 40
-                          ? `🟡 Medium Risk Detected: ${mlResult.predicted_condition.replace('_', ' ')} detected with moderate confidence (${severityScore}%). Continue close monitoring and adjustment of care plan.`
-                          : `🟢 Low Risk Detected: ${mlResult.predicted_condition.replace('_', ' ')} detected with standard confidence (${severityScore}%). Patient condition appears stable. routine monitoring recommended.`
+                          ? `Medium Risk Detected: ${mlResult.predicted_condition.replace('_', ' ')} detected with moderate confidence (${severityScore}%). Continue close monitoring and adjustment of care plan.`
+                          : `Low Risk Detected: ${mlResult.predicted_condition.replace('_', ' ')} detected with standard confidence (${severityScore}%). Patient condition appears stable. routine monitoring recommended.`
                       }
                     </p>
                   </div>
 
                   {/* Vital Signs Analysis */}
-                  <div style={{ backgroundColor: '#f9f9f9', borderRadius: '12px', padding: '1.5rem', border: '1px solid #e5e7eb' }}>
+                  <div style={{ backgroundColor: '#fdf6f9', borderRadius: '18px', padding: '1.5rem', border: '1px solid rgba(219,39,119,0.14)' }}>
                     <h4 style={{ margin: '0 0 1rem 0', color: '#7C3AED', fontSize: '1rem', fontWeight: '600' }}>📋 Vital Signs Analysis</h4>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', fontSize: '0.9rem' }}>
-                      <div style={{ padding: '0.75rem', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ padding: '0.75rem', background: 'linear-gradient(150deg, rgba(255,255,255,0.85) 0%, rgba(255,228,233,0.6) 100%)', borderRadius: '14px', border: '1px solid rgba(219,39,119,0.14)' }}>
                         <div style={{ fontWeight: '600', color: '#333', marginBottom: '0.25rem' }}>Heart Rate</div>
                         <div style={{ color: '#666' }}>{inputHr} BPM {inputHr > 100 ? '⚠️ Elevated' : inputHr < 60 ? '⚠️ Low' : '✓ Normal'}</div>
                       </div>
-                      <div style={{ padding: '0.75rem', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ padding: '0.75rem', background: 'linear-gradient(150deg, rgba(255,255,255,0.85) 0%, rgba(255,228,233,0.6) 100%)', borderRadius: '14px', border: '1px solid rgba(219,39,119,0.14)' }}>
                         <div style={{ fontWeight: '600', color: '#333', marginBottom: '0.25rem' }}>SpO₂</div>
                         <div style={{ color: '#666' }}>{inputSpo2}% {inputSpo2 < 94 ? '⚠️ Low' : '✓ Normal'}</div>
                       </div>
-                      <div style={{ padding: '0.75rem', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ padding: '0.75rem', background: 'linear-gradient(150deg, rgba(255,255,255,0.85) 0%, rgba(255,228,233,0.6) 100%)', borderRadius: '14px', border: '1px solid rgba(219,39,119,0.14)' }}>
                         <div style={{ fontWeight: '600', color: '#333', marginBottom: '0.25rem' }}>Temperature</div>
                         <div style={{ color: '#666' }}>{inputTemp}°C {inputTemp > 38 ? '⚠️ Fever' : inputTemp < 36 ? '⚠️ Low' : '✓ Normal'}</div>
                       </div>
-                      <div style={{ padding: '0.75rem', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ padding: '0.75rem', background: 'linear-gradient(150deg, rgba(255,255,255,0.85) 0%, rgba(255,228,233,0.6) 100%)', borderRadius: '14px', border: '1px solid rgba(219,39,119,0.14)' }}>
                         <div style={{ fontWeight: '600', color: '#333', marginBottom: '0.25rem' }}>Blood Pressure</div>
                         <div style={{ color: '#666' }}>{inputBpSystolic}/{inputBpDiastolic} mmHg {inputBpSystolic > 140 ? '⚠️ High' : inputBpSystolic < 90 ? '⚠️ Low' : '✓ Normal'}</div>
                       </div>
@@ -1290,9 +1389,9 @@ export default function PatientDashboard({ userId, onLogout }) {
             </div>
 
             {/* AI Health Risk History - Area Chart */}
-            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem', border: '2px solid #e9d5ff' }}>
+            <div style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.8) 0%, rgba(255,214,224,0.55) 55%, rgba(238,220,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', borderRadius: '18px', padding: '2rem', boxShadow: '0 10px 32px rgba(219,39,119,0.10)', marginBottom: '2rem', border: '2px solid #e9d5ff' }}>
               <h3 style={{ margin: '0 0 0.5rem 0', color: '#7C3AED', fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700' }}>
-                <span>📊</span> Real-Time Confidence Tracking (Model 01)
+                <SectionIcon icon={Activity} color="#7C3AED" /> Real-Time Confidence Tracking <span style={{ fontWeight: 400, opacity: 0.55, fontSize: '0.85em' }}>· Model 01</span>
               </h3>
               <p style={{ margin: '0 0 1.5rem 0', color: '#666', fontSize: '0.9rem' }}>24-hour risk forecast based on current vital parameters • Updates as you adjust parameters</p>
               {trajectoryData.length > 0 ? (
@@ -1322,7 +1421,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                         contentStyle={{
                           backgroundColor: 'rgba(255,255,255,0.95)',
                           border: '2px solid #7C3AED',
-                          borderRadius: '8px',
+                          borderRadius: '14px',
                           boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                           padding: '12px'
                         }}
@@ -1341,7 +1440,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                       />
                     </AreaChart>
                   </ResponsiveContainer>
-                  <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '0.85rem', color: '#666' }}>
+                  <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#fdf6f9', borderRadius: '14px', border: '1px solid rgba(219,39,119,0.14)', fontSize: '0.85rem', color: '#666' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <span style={{ fontWeight: '600', color: '#7C3AED' }}>Current Risk:</span> {trajectoryData[0]?.risk}%
@@ -1365,45 +1464,52 @@ export default function PatientDashboard({ userId, onLogout }) {
             </div>
 
             {/* Digital Twin Visualization */}
-            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem', border: '2px solid #e9d5ff' }}>
+            <div style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.8) 0%, rgba(255,214,224,0.55) 55%, rgba(238,220,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', borderRadius: '18px', padding: '1rem', boxShadow: '0 10px 32px rgba(219,39,119,0.10)', marginBottom: '2rem', border: '2px solid #e9d5ff' }}>
               <h3 style={{ margin: '0 0 1rem 0', color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🧬</span> Interactive Digital Twin
+                <SectionIcon icon={Dna} color="#7C3AED" /> Interactive Digital Twin
               </h3>
               <DigitalTwin scanData={digitalTwinData} isScanning={agentScanLoading} />
             </div>
 
             {/* Phidata Agent-Debate AI Scan - same style as Doctor Dashboard */}
-            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem' }}>
+            <div style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.8) 0%, rgba(255,214,224,0.55) 55%, rgba(238,220,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', borderRadius: '18px', padding: '2rem', boxShadow: '0 10px 32px rgba(219,39,119,0.10)', marginBottom: '2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                 <h3 style={{ margin: 0, color: '#7C3AED', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>🤖</span> Live AI Multi-Agent Interaction
+                  <SectionIcon icon={Bot} color="#7C3AED" /> Live AI Multi-Agent Interaction
                 </h3>
-                <Button
-                  onClick={handleRunAgentDebateScan}
-                  disabled={agentScanLoading}
-                  className="h-11 px-8 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md font-bold flex items-center gap-2"
-                >
-                  {agentScanLoading ? 'Scanning Patient...' : 'Run Phidata Agent Scan ✨'}
-                </Button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                  <Button
+                    onClick={handleRunAgentDebateScan}
+                    disabled={agentScanLoading}
+                    className="h-11 px-8 rounded-xl bg-violet-600 text-white hover:bg-violet-700 shadow-md font-bold flex items-center gap-2"
+                  >
+                    {agentScanLoading ? `Scanning… ${scanElapsedSeconds}s` : 'Run Phidata Agent Scan ✨'}
+                  </Button>
+                  {agentScanLoading && (
+                    <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                      Running 7 AI agents in sequence — typically takes 20-45s
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Current Vital Signs - Always Visible */}
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem', marginBottom: '1rem' }}>
+              <div style={{ background: '#fdf6f9', border: '1px solid rgba(219,39,119,0.14)', borderRadius: '18px', padding: '1rem', marginBottom: '1rem' }}>
                 <h4 style={{ color: '#64748b', margin: '0 0 0.75rem 0', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Current Vital Signs</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
-                  <div style={{ padding: '0.75rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <div style={{ padding: '0.75rem', background: 'white', border: '1px solid rgba(219,39,119,0.14)', borderRadius: '14px' }}>
                     <div style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>❤️ Heart Rate</div>
                     <div style={{ color: '#1e293b', fontSize: '1.3rem', fontWeight: 'bold', marginTop: '0.25rem' }}>{inputHr} BPM</div>
                   </div>
-                  <div style={{ padding: '0.75rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <div style={{ padding: '0.75rem', background: 'white', border: '1px solid rgba(219,39,119,0.14)', borderRadius: '14px' }}>
                     <div style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>💨 SpO₂</div>
                     <div style={{ color: '#1e293b', fontSize: '1.3rem', fontWeight: 'bold', marginTop: '0.25rem' }}>{inputSpo2} %</div>
                   </div>
-                  <div style={{ padding: '0.75rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <div style={{ padding: '0.75rem', background: 'white', border: '1px solid rgba(219,39,119,0.14)', borderRadius: '14px' }}>
                     <div style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>🌡️ Temperature</div>
                     <div style={{ color: '#1e293b', fontSize: '1.3rem', fontWeight: 'bold', marginTop: '0.25rem' }}>{inputTemp} °C</div>
                   </div>
-                  <div style={{ padding: '0.75rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <div style={{ padding: '0.75rem', background: 'white', border: '1px solid rgba(219,39,119,0.14)', borderRadius: '14px' }}>
                     <div style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>📊 Blood Pressure</div>
                     <div style={{ color: '#1e293b', fontSize: '1.3rem', fontWeight: 'bold', marginTop: '0.25rem' }}>{inputBpSystolic}/{inputBpDiastolic} mmHg</div>
                   </div>
@@ -1411,7 +1517,7 @@ export default function PatientDashboard({ userId, onLogout }) {
               </div>
 
               {agentScanError && (
-                <div style={{ padding: '0.9rem 1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#991b1b', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                <div style={{ padding: '0.9rem 1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '14px', color: '#991b1b', marginBottom: '1rem', fontSize: '0.9rem' }}>
                   {agentScanError}
                 </div>
               )}
@@ -1466,7 +1572,7 @@ export default function PatientDashboard({ userId, onLogout }) {
               {/* Left: Upload Section */}
               <div className="premium-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column' }}>
                 <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.25rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>📄</span> Upload Medical Report
+                  <SectionIcon icon={FileText} color="#7C3AED" /> Upload Medical Report
                 </h3>
                 <p style={{ color: '#666', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Upload high-resolution report images for AI comparison.</p>
                 
@@ -1475,7 +1581,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                     border: '2px dashed #cbd5e1', 
                     borderRadius: '16px', 
                     padding: '2rem', 
-                    backgroundColor: '#f8fafc',
+                    backgroundColor: '#fdf6f9',
                     cursor: 'pointer',
                     textAlign: 'center',
                     transition: 'all 0.3s'
@@ -1498,7 +1604,7 @@ export default function PatientDashboard({ userId, onLogout }) {
 
                 {reportImage && (
                   <div style={{ marginTop: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ flex: 1, overflow: 'hidden', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', marginBottom: '1rem' }}>
+                    <div style={{ flex: 1, overflow: 'hidden', borderRadius: '18px', border: '1px solid rgba(219,39,119,0.14)', background: '#fff', marginBottom: '1rem' }}>
                       <img src={`data:image/jpeg;base64,${reportImage}`} alt="Report Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
                     <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -1512,20 +1618,20 @@ export default function PatientDashboard({ userId, onLogout }) {
                       <Button 
                         onClick={handleRunReportAnalysis}
                         disabled={reportLoading}
-                        className="flex-[2] h-10 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-bold"
+                        className="flex-[2] h-10 rounded-lg bg-violet-600 text-white hover:bg-violet-700 font-bold"
                       >
                         {reportLoading ? 'Analyzing...' : 'Run Cross-Analysis ✨'}
                       </Button>
                     </div>
                   </div>
                 )}
-                {reportError && <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#fef2f2', borderRadius: '8px', color: '#991b1b', fontSize: '0.85rem', fontWeight: '600' }}>⚠️ {reportError}</div>}
+                {reportError && <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#fef2f2', borderRadius: '14px', color: '#991b1b', fontSize: '0.85rem', fontWeight: '600' }}>⚠️ {reportError}</div>}
               </div>
 
               {/* Right: AI Analysis Summary (from Sensors) */}
               <div className="premium-card" style={{ padding: '2rem' }}>
                 <h3 style={{ margin: '0 0 1.5rem 0', color: '#7C3AED', fontSize: '1.25rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>🤖</span> AI Analysis Summary
+                  <SectionIcon icon={Bot} color="#7C3AED" /> AI Analysis Summary
                 </h3>
                 {agentScanResult ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1556,7 +1662,7 @@ export default function PatientDashboard({ userId, onLogout }) {
             >
               <div className="premium-card" style={{ padding: '2rem' }}>
                 <h3 style={{ margin: '0 0 1.5rem 0', color: '#334155', fontSize: '1.25rem', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span>🧠</span> Insight Correlation
+                  <SectionIcon icon={Brain} color="#7C3AED" /> Insight Correlation
                 </h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '2.5rem', alignItems: 'center' }}>
                   <div style={{ background: 'linear-gradient(135deg, #f472b6 0%, #db2777 100%)', padding: '2.5rem', borderRadius: '32px', color: 'white', textAlign: 'center', boxShadow: '0 15px 35px rgba(219, 39, 119, 0.25)', border: '1px solid rgba(255,255,255,0.2)' }}>
@@ -1581,7 +1687,7 @@ export default function PatientDashboard({ userId, onLogout }) {
               </div>
             </BorderRotate>
             ) : (
-              <div className="premium-card" style={{ padding: '3rem', textAlign: 'center', background: '#f8fafc', border: '1px dashed #cbd5e1' }}>
+              <div className="premium-card" style={{ padding: '3rem', textAlign: 'center', background: '#fdf6f9', border: '1px dashed #cbd5e1' }}>
                 <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.3 }}>🧠</div>
                 <p style={{ color: '#94a3b8', fontWeight: '600' }}>Correlation results will appear here after analysis.</p>
               </div>
@@ -1589,7 +1695,7 @@ export default function PatientDashboard({ userId, onLogout }) {
           </div>
         ) : activeTab === 'appointments' ? (
           <>
-            <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '1.5rem', border: '1px solid #ffe4e9', boxShadow: '0 10px 30px rgba(0,0,0,0.02)', marginBottom: '1.5rem' }}>
+            <div style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.8) 0%, rgba(255,214,224,0.55) 55%, rgba(238,220,255,0.5) 100%)', backdropFilter: 'blur(30px) saturate(160%)', WebkitBackdropFilter: 'blur(30px) saturate(160%)', borderRadius: '16px', padding: '1.5rem', border: '1px solid #ffe4e9', boxShadow: '0 10px 30px rgba(0,0,0,0.02)', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a', fontSize: '1.25rem', fontWeight: '900' }}>📅 Appointments Scheduler</h3>
               <p style={{ margin: '0 0 1rem 0', color: '#0f172a', fontSize: '0.92rem', fontWeight: '500' }}>
                 Booking is enabled only after discharge confirmation. Each slot is 20 minutes, and overlapping appointments are blocked automatically.
@@ -1632,13 +1738,13 @@ export default function PatientDashboard({ userId, onLogout }) {
             </div>
 
             {appointmentError && (
-              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '0.9rem' }}>
+              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '14px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '0.9rem' }}>
                 {appointmentError}
               </div>
             )}
 
             {appointmentSuccess && (
-              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '8px', backgroundColor: '#ecfdf5', border: '1px solid #86efac', color: '#166534', fontSize: '0.9rem' }}>
+              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '14px', backgroundColor: '#ecfdf5', border: '1px solid #86efac', color: '#166534', fontSize: '0.9rem' }}>
                 {appointmentSuccess}
               </div>
             )}
@@ -1660,7 +1766,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {availableDoctors.map((doctor) => (
-                      <div key={doctor.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem' }}>
+                      <div key={doctor.id} style={{ border: '1px solid rgba(219,39,119,0.14)', borderRadius: '10px', padding: '1rem' }}>
                         <div style={{ marginBottom: '0.8rem' }}>
                           <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>{doctor.name}</div>
                           <div style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: '600' }}>{doctor.specialty}</div>
@@ -1688,7 +1794,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                                 }}
                                 className={cn(
                                   "text-[0.75rem] h-9 px-2 rounded-lg font-bold transition-all",
-                                  isSelected ? "bg-blue-600 text-white shadow-md" : "bg-white text-slate-700",
+                                  isSelected ? "bg-violet-600 text-white shadow-md" : "bg-white text-slate-700",
                                   !slot.available && "opacity-40 grayscale cursor-not-allowed"
                                 )}
                                 title={slot.available ? 'Available' : 'Already booked'}
@@ -1706,7 +1812,7 @@ export default function PatientDashboard({ userId, onLogout }) {
             </BorderRotate>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div className="premium-card" style={{ padding: '1.5rem', background: '#fff' }}>
+                <div className="premium-card" style={{ padding: '1.5rem' }}>
                   <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '1.1rem', fontWeight: '900' }}>Selected Slot</h4>
                   {selectedSlot ? (
                     <div className="premium-card" style={{ padding: '1rem', background: 'rgba(247,167,192,0.05)', borderRadius: '16px', borderStyle: 'dashed' }}>
@@ -1736,7 +1842,7 @@ export default function PatientDashboard({ userId, onLogout }) {
                   </Button>
                 </div>
 
-                <div className="premium-card" style={{ padding: '1.5rem', background: '#fff' }}>
+                <div className="premium-card" style={{ padding: '1.5rem' }}>
                   <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a', fontSize: '1.1rem', fontWeight: '900' }}>My Appointments</h4>
                   {!myAppointments.length ? (
                     <p style={{ color: '#64748b', fontSize: '0.9rem' }}>No active bookings found.</p>
@@ -1755,9 +1861,9 @@ export default function PatientDashboard({ userId, onLogout }) {
                 </div>
 
                 {/* New: Available Doctor List Container */}
-                <div className="premium-card" style={{ padding: '1.5rem', background: '#fff' }}>
+                <div className="premium-card" style={{ padding: '1.5rem' }}>
                   <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a', fontSize: '1.1rem', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>👨‍⚕️</span> Available Specialists
+                    <SectionIcon icon={Stethoscope} color="#7C3AED" /> Available Specialists
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {availableDoctors.slice(0, 4).map(doctor => (
@@ -1784,6 +1890,7 @@ export default function PatientDashboard({ userId, onLogout }) {
           </div>
         )}
       </main>
+      <ChatWidget hasToken={hasToken} label="Ask VitalsGuard about my health" />
     </div>
   );
 }

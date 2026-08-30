@@ -4,6 +4,10 @@ const path = require('path');
 
 const app = express();
 
+const ML_ENGINE_PORT = process.env.ML_ENGINE_PORT || 5000;
+const FASTAPI_PORT = process.env.FASTAPI_PORT || 8000;
+const NODE_BACKEND_PORT = process.env.NODE_BACKEND_PORT || 5003;
+
 // Simple logging middleware to see traffic in Hugging Face logs
 app.use((req, res, next) => {
   const start = Date.now();
@@ -14,13 +18,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// 1. Serve the built Vite frontend static files
-app.use(express.static(path.join(__dirname, 'vitalsgaurd/dist')));
+// 1. Serve the built Vite frontend static files.
+// index.html must never be cached — it's what references the current
+// hashed JS/CSS bundle names, so a stale cached copy silently keeps a
+// browser on old frontend code (and old bugs) after every redeploy.
+app.use(express.static(path.join(__dirname, 'vitalsgaurd/dist'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  },
+}));
 
 // 2. ML Prediction Routes → Flask (port 5000)
 app.use(createProxyMiddleware({
   pathFilter: ['/api/predict', '/api/explain-trend', '/api/integrated', '/health'],
-  target: 'http://localhost:5000',
+  target: `http://localhost:${ML_ENGINE_PORT}`,
   changeOrigin: true,
   on: { 
     error: (err, req, res) => {
@@ -33,7 +46,7 @@ app.use(createProxyMiddleware({
 // 3. Agentic / Other API Routes → FastAPI (port 8000)
 app.use(createProxyMiddleware({
   pathFilter: (path) => path.startsWith('/api') && !path.startsWith('/api/predict'),
-  target: 'http://localhost:8000',
+  target: `http://localhost:${FASTAPI_PORT}`,
   changeOrigin: true,
   on: { 
     error: (err, req, res) => {
@@ -46,7 +59,7 @@ app.use(createProxyMiddleware({
 // 4. Auth + Node routes → Node backend (port 5003)
 app.use(createProxyMiddleware({
   pathFilter: ['/auth', '/store-report', '/appointments', '/alerts'],
-  target: 'http://localhost:5003',
+  target: `http://localhost:${NODE_BACKEND_PORT}`,
   changeOrigin: true,
   on: { 
     error: (err, req, res) => {
@@ -59,6 +72,7 @@ app.use(createProxyMiddleware({
 // 5. SPA Fallback
 // If no route matches, serve index.html (important for React Router)
 app.use((req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'vitalsgaurd/dist/index.html'));
 });
 
@@ -67,6 +81,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('================================================');
   console.log('🚀 VitalsGuard Gateway Running');
   console.log('Port: ' + PORT);
-  console.log('Routing: /api/predict -> 5000, /api -> 8000, /auth -> 5003');
+  console.log(`Routing: /api/predict -> ${ML_ENGINE_PORT}, /api -> ${FASTAPI_PORT}, /auth -> ${NODE_BACKEND_PORT}`);
   console.log('================================================');
 });

@@ -57,6 +57,27 @@ export const getAnatomicalMarkerPos = (region, bboxSize) => {
 };
 
 /**
+ * The What-If Simulator (Model 07, base_models/07_whatif_simulator) only ever
+ * emits one of these 9 exact condition strings (see generate_data.py's
+ * RISK_LABELS) — matched here explicitly rather than relying purely on loose
+ * substring matching below, since several of them ("hypotension",
+ * "hypertension", "hypothermia", "No significant risk") don't contain any of
+ * the old generic keywords and used to silently fall through to the wrong
+ * default region.
+ */
+const WHATIF_CONDITION_REGION = {
+  'no significant risk': REGIONS.NONE,
+  'risk of hypotension': REGIONS.HEART,
+  'risk of hypertension': REGIONS.HEART,
+  'possible fever development': REGIONS.BODY,
+  'risk of hypoxia': REGIONS.LUNGS,
+  'risk of tachycardia': REGIONS.HEART,
+  'risk of bradycardia': REGIONS.HEART,
+  'risk of respiratory distress': REGIONS.LUNGS,
+  'risk of hypothermia': REGIONS.BODY,
+};
+
+/**
  * Normalizes a scan result to a valid region identifier.
  */
 export const normalizeRegion = (scanData) => {
@@ -67,7 +88,7 @@ export const normalizeRegion = (scanData) => {
     return affected;
   }
 
-  const cond = (scanData.condition || '').toLowerCase();
+  const cond = (scanData.condition || '').toLowerCase().trim();
   const symptoms = (scanData.fingerprints || []).map(f =>
     typeof f === 'object' ? f.disease?.toLowerCase() : f.toLowerCase()
   ).join(' ');
@@ -76,17 +97,36 @@ export const normalizeRegion = (scanData) => {
     return REGIONS.NONE;
   }
 
-  if (cond.includes('cardia') || symptoms.includes('arrhythmia') || cond.includes('heart') || cond.includes('tachycardia')) {
+  if (cond in WHATIF_CONDITION_REGION) {
+    return WHATIF_CONDITION_REGION[cond];
+  }
+
+  // "Nothing wrong" phrasing — must be checked before the generic fallback below.
+  if (cond.includes('no significant risk') || cond === 'normal' || cond.includes('stable')) {
+    return REGIONS.NONE;
+  }
+
+  if (
+    cond.includes('cardia') || cond.includes('heart') ||
+    cond.includes('hypotension') || cond.includes('hypertension') ||
+    symptoms.includes('arrhythmia')
+  ) {
     return REGIONS.HEART;
   }
-  if (cond.includes('pulm') || cond.includes('lung') || cond.includes('respiratory') || cond.includes('hypoxemia')) {
+  if (
+    cond.includes('pulm') || cond.includes('lung') || cond.includes('respiratory') ||
+    cond.includes('hypoxemia') || cond.includes('hypoxia')
+  ) {
     return REGIONS.LUNGS;
   }
-  if (cond.includes('temp') || cond.includes('fever') || symptoms.includes('sepsis') || cond.includes('sepsis')) {
+  if (
+    cond.includes('fever') || cond.includes('hypothermia') || cond.includes('temp') ||
+    symptoms.includes('sepsis') || cond.includes('sepsis')
+  ) {
     return REGIONS.BODY;
   }
 
-  return REGIONS.HEART;
+  return REGIONS.HEART; // last-resort default for unrecognised text
 };
 
 export function mapRiskRegions(vitals = []) {
