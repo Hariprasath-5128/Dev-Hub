@@ -514,10 +514,27 @@ export default function PatientDashboard({ userId, onLogout, hasToken = false })
         const nextTemp = parseFloat(Math.max(34, Math.min(43, last.temp + tempVar)).toFixed(2));
         const nextSys = Math.round(Math.max(70, Math.min(240, (last.bp_systolic || 120) + sysVar)));
         const nextDia = Math.round(Math.max(40, Math.min(160, (last.bp_diastolic || 80) + diaVar)));
+        const calculatedScore = Math.round(calculateLinearRisk({ hr: nextHr, spo2: nextSpo2, temp: nextTemp, sys: nextSys }));
+        const nextStatus = calculatedScore > 70 ? 'critical' : calculatedScore > 40 ? 'warning' : 'stable';
+
+        if (calculatedScore > 70) {
+            const token = localStorage.getItem('vitalsguard_token');
+            const currentDiagnosis = mlResultRef.current?.predicted_condition || 'Unknown Condition';
+            const currentTrend = trendResultRef.current?.trend || 'Unknown Trajectory';
+            
+            axios.post('/api/emergency-alert', {
+                patient_id: userId || 'Patient-Local',
+                vitals: { heart_rate: nextHr, spo2: nextSpo2, temperature: nextTemp, ecg_irregularity: 'N/A' },
+                risk_score: calculatedScore,
+                diagnosis: currentDiagnosis,
+                trend: currentTrend
+            }, { headers: token ? { Authorization: `Bearer ${token}` } : {} }).catch(() => {});
+        }
+
         const newReading = {
           time: `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`,
           hr: nextHr, spo2: nextSpo2, temp: nextTemp, bp_systolic: nextSys, bp_diastolic: nextDia,
-          status: (nextHr > 110 || nextSpo2 < 92) ? 'warning' : 'stable'
+          status: nextStatus
         };
         setCurrentHr(nextHr); setCurrentSpo2(nextSpo2); setCurrentTemp(nextTemp); setCurrentBpSystolic(nextSys); setCurrentBpDiastolic(nextDia);
         const newHistory = [...prev]; if (newHistory.length > 50) newHistory.shift();
@@ -541,9 +558,16 @@ export default function PatientDashboard({ userId, onLogout, hasToken = false })
   // on every 1.5s simulation tick — that would starve it before 8s ever elapses.
   const liveVitalsRef = useRef(null);
   liveVitalsRef.current = {
+    patient_id: userId || 'Patient-Local',
     heart_rate: currentHr, spo2: currentSpo2, temperature: currentTemp,
     systolic_bp: currentBpSystolic, diastolic_bp: currentBpDiastolic,
   };
+  
+  // Refs to access latest ML results inside the setInterval closure
+  const mlResultRef = useRef(mlResult);
+  useEffect(() => { mlResultRef.current = mlResult; }, [mlResult]);
+  const trendResultRef = useRef(trendResult);
+  useEffect(() => { trendResultRef.current = trendResult; }, [trendResult]);
 
   useEffect(() => {
     if (!hasToken) return; // no session token yet — nothing to authenticate with

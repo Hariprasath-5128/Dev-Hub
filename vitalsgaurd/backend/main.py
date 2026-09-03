@@ -280,6 +280,41 @@ async def health_fingerprint(payload: VitalsPayload):
     }
 
 
+import time
+
+@app.post("/api/emergency-alert")
+async def trigger_emergency_alert(payload: dict, current_user: CurrentUser = Depends(get_current_user)):
+    """Fast emergency alert endpoint triggered by UI when live vitals hit critical."""
+    patient_id = enforce_patient_scope(current_user, payload.get("patient_id"))
+    
+    # Cooldown: only 1 alert per 60 seconds per patient
+    last_sent = getattr(app.state, f"last_alert_{patient_id}", 0)
+    if time.time() - last_sent < 60:
+        return {"dispatched": False, "reason": "cooldown"}
+        
+    setattr(app.state, f"last_alert_{patient_id}", time.time())
+    
+    vitals = payload.get("vitals", {})
+    risk_score = payload.get("risk_score")
+    model_diagnosis = payload.get("diagnosis", "N/A")
+    trend = payload.get("trend", "N/A")
+    
+    if risk_score is not None:
+        consensus = f"Model Alert! Real-time Clinical Risk Assessment for {patient_id} reached CRITICAL ({risk_score}%).\nModel Diagnosis: {model_diagnosis.replace('_', ' ')}\nTrajectory: {trend}"
+    else:
+        consensus = f"Automatic Live Monitor Alert! Patient {patient_id} hit CRITICAL vitals thresholds."
+    
+    asyncio.create_task(
+        asyncio.to_thread(
+            dispatch_emergency_alert,
+            vitals,
+            consensus,
+            "critical"
+        )
+    )
+    return {"dispatched": True}
+
+
 @app.post("/api/vitals/record")
 async def record_vitals(payload: VitalsRecordPayload, current_user: CurrentUser = Depends(get_current_user)):
     """

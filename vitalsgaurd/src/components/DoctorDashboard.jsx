@@ -10,6 +10,7 @@ import { AlertTriangle, Sparkles, UserMinus, Activity, Thermometer, Droplets, Ba
 import { patients as initialPatients } from '../data/mockVitals';
 import axios from 'axios';
 import ChatWidget from './ChatWidget';
+import { getAuthToken } from '../utils/authToken';
 
 const API_BASE = '';
 const AI_API_BASE = '/api';
@@ -156,7 +157,7 @@ export default function DoctorDashboard({ onLogout, hasToken = false }) {
         const checkConnection = async () => {
             try {
                 const res = await axios.get(`${API_BASE}/health`);
-                if (res.data.status === 'ok') setConnectionStatus('online');
+                if (res.data.status === 'ok' || res.data.status === 'healthy') setConnectionStatus('online');
                 else setConnectionStatus('offline');
             } catch (e) {
                 setConnectionStatus('offline');
@@ -189,6 +190,15 @@ export default function DoctorDashboard({ onLogout, hasToken = false }) {
                 const newBp = Math.round(Math.max(90, Math.min(180, lastVital.bp + bpVar)));
 
                 const newStatus = (newHr > 110 || newSpo2 < 92 || newBp > 150) ? 'critical' : (newHr > 95 || newSpo2 < 95 || newBp > 135) ? 'warning' : 'stable';
+
+                if (newStatus === 'critical') {
+                    const token = getAuthToken();
+                    axios.post(`${AI_API_BASE}/emergency-alert`, {
+                        patient_id: patient.id,
+                        vitals: { heart_rate: newHr, spo2: newSpo2, temperature: newTemp, ecg_irregularity: 'N/A' }
+                    }, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+                    .catch(() => {});
+                }
 
                 const newVitals = [...patient.vitals, { time: timeStr, hr: newHr, spo2: newSpo2, temp: newTemp, bp: newBp, status: newStatus }];
                 if (newVitals.length > 20) newVitals.shift();
@@ -270,12 +280,17 @@ export default function DoctorDashboard({ onLogout, hasToken = false }) {
         setAnalyzing(true);
         setScanResult(null);
         try {
+            const token = getAuthToken();
             const res = await axios.post(`${AI_API_BASE}/analyze-vitals`, {
                 heart_rate: latest.hr,
                 spo2: latest.spo2,
                 temperature: latest.temp,
-                blood_pressure: latest.bp,
+                systolic_bp: latest.bp || 120,
+                diastolic_bp: 80,
+                patient_id: activePatient.id,
                 ecg_irregularity: (activePatient.id === 'p2' ? 0.72 : 0.0)
+            }, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
             setScanResult(res.data);
         } catch (error) {
